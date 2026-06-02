@@ -1,1 +1,848 @@
-hello
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RecordSB</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Custom Animations */
+        @keyframes pulse-red {
+            0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); }
+            70% { transform: scale(1); box-shadow: 0 0 0 10px rgba(239, 68, 68, 0); }
+            100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+        }
+        .pulse {
+            animation: pulse-red 2s infinite;
+            border-radius: 50%;
+            display: inline-block;
+            background-color: transparent;
+        }
+        @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+        .spin {
+            animation: spin 1s linear infinite;
+            display: inline-block;
+        }
+
+        /* Custom Badge Colors */
+        .badge {
+            @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium;
+        }
+        .badge-success, .badge-done { @apply bg-green-100 text-green-800; }
+        .badge-danger, .badge-error { @apply bg-red-100 text-red-800; }
+        .badge-warning { @apply bg-yellow-100 text-yellow-800; }
+        .badge-info, .badge-uploading { @apply bg-blue-100 text-blue-800; }
+        .badge-pending { @apply bg-gray-100 text-gray-800; }
+        .badge-recording { @apply bg-red-100 text-red-800 animate-pulse; }
+
+        /* Hide scrollbars for cleaner look on tables */
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    </style>
+</head>
+<body class="bg-gray-50 text-gray-900 font-sans min-h-screen">
+
+    <!-- LOGIN SCREEN -->
+    <div id="login-screen" class="flex items-center justify-center min-h-screen">
+        <div class="bg-white p-8 rounded-xl shadow-lg max-w-sm w-full">
+            <div class="text-center mb-6">
+                <h1 class="text-2xl font-bold text-gray-800">Livestream Recorder</h1>
+                <p class="text-gray-500 text-sm mt-1">Please log in to continue</p>
+            </div>
+            <form id="login-form" class="space-y-4">
+                <div>
+                    <label for="password" class="block text-sm font-medium text-gray-700">Password</label>
+                    <input type="password" id="password" required 
+                        class="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500">
+                </div>
+                <div id="login-error" class="hidden text-sm text-red-600 bg-red-50 p-3 rounded-md"></div>
+                <button type="submit" id="login-submit" 
+                    class="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors">
+                    Log In
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <!-- MAIN APP -->
+    <div id="main-app" class="hidden max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <header class="flex justify-between items-center mb-8">
+            <h1 class="text-3xl font-bold text-gray-900 tracking-tight">Livestream Recorder</h1>
+            <nav class="flex space-x-2 bg-gray-200 p-1 rounded-lg">
+                <button id="nav-recordings" class="px-4 py-2 text-sm font-medium rounded-md transition-colors active bg-white shadow text-gray-900">Recordings</button>
+                <button id="nav-admin" class="hidden px-4 py-2 text-sm font-medium rounded-md transition-colors text-gray-600 hover:text-gray-900">Admin</button>
+            </nav>
+        </header>
+
+        <!-- RECORDINGS TAB -->
+        <div id="tab-recordings" class="space-y-8">
+            
+            <!-- Schedule Form -->
+            <section class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+                <h2 class="text-lg font-semibold mb-4 border-b pb-2">Schedule New Recording</h2>
+                <form id="schedule-form" class="space-y-4">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label for="session-name" class="block text-sm font-medium text-gray-700">Session Name <span class="text-xs text-gray-400 font-normal">(Internal ID)</span></label>
+                            <input type="text" id="session-name" required class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
+                        </div>
+                        <div>
+                            <label for="recording-name" class="block text-sm font-medium text-gray-700">Recording Name <span class="text-xs text-gray-400 font-normal">(Filename)</span></label>
+                            <input type="text" id="recording-name" required class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
+                        </div>
+                        <div>
+                            <label for="start-time" class="block text-sm font-medium text-gray-700">Start Time</label>
+                            <input type="datetime-local" id="start-time" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
+                            <div class="mt-2 flex items-center">
+                                <input id="start-now" type="checkbox" class="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded">
+                                <label for="start-now" class="ml-2 block text-sm text-gray-900">Start immediately</label>
+                            </div>
+                        </div>
+                        <div>
+                            <label for="duration" class="block text-sm font-medium text-gray-700">Duration (Minutes) <span id="duration-helper" class="text-xs text-blue-600 font-normal ml-1"></span></label>
+                            <input type="number" id="duration" min="1" required class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
+                        </div>
+                    </div>
+                    <div id="schedule-error" class="hidden text-sm text-red-600 bg-red-50 p-3 rounded-md"></div>
+                    <div class="flex justify-end pt-2">
+                        <button type="submit" id="schedule-submit" class="inline-flex justify-center py-2 px-6 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
+                            Schedule Recording
+                        </button>
+                    </div>
+                </form>
+            </section>
+
+            <!-- Active Status Card -->
+            <section id="status-card" class="hidden bg-blue-50 rounded-xl shadow-md border border-blue-100 p-6 overflow-hidden relative">
+                <div class="absolute top-0 left-0 w-1 bg-blue-500 h-full"></div>
+                <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center">
+                    <div class="flex items-center space-x-4 mb-4 sm:mb-0">
+                        <div id="status-icon" class="text-4xl w-12 h-12 flex items-center justify-center">⏳</div>
+                        <div>
+                            <h3 id="status-name" class="text-xl font-bold text-gray-900">Recording Name</h3>
+                            <div class="flex items-center space-x-2 mt-1">
+                                <span id="status-label" class="font-medium text-blue-800">Pending</span>
+                                <span id="status-timer" class="text-sm font-mono text-gray-600 font-medium"></span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="flex space-x-3">
+                        <button id="btn-cancel-recording" class="hidden px-4 py-2 bg-red-100 text-red-700 hover:bg-red-200 text-sm font-medium rounded-md transition-colors">Cancel</button>
+                        <a href="#" id="btn-status-download" target="_blank" class="hidden px-4 py-2 bg-blue-600 text-white hover:bg-blue-700 text-sm font-medium rounded-md shadow transition-colors">Download</a>
+                    </div>
+                </div>
+                
+                <div id="status-error-text" class="hidden mt-4 text-sm text-red-600 bg-red-100 p-3 rounded border border-red-200"></div>
+
+                <div id="status-progress-container" class="hidden mt-5 w-full">
+                    <div class="w-full bg-gray-200 rounded-full h-2.5 overflow-hidden">
+                        <div id="status-progress-bar" class="bg-red-500 h-2.5 rounded-full transition-all duration-1000 ease-linear" style="width: 0%"></div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Recordings List -->
+            <section>
+                <h2 class="text-lg font-semibold mb-4">Past Recordings</h2>
+                <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+                    <div id="recordings-list" class="divide-y divide-gray-200 p-4">
+                        <p class="text-gray-500 text-sm py-4 text-center">Loading recordings...</p>
+                    </div>
+                </div>
+            </section>
+        </div>
+
+        <!-- ADMIN TAB -->
+        <div id="tab-admin" class="hidden space-y-8">
+            
+            <!-- Summary Stats -->
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
+                    <p class="text-sm font-medium text-gray-500 truncate">Total Recordings</p>
+                    <p id="stat-total" class="mt-1 text-3xl font-semibold text-gray-900">-</p>
+                </div>
+                <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
+                    <p class="text-sm font-medium text-gray-500 truncate">Recordings This Month</p>
+                    <p id="stat-month" class="mt-1 text-3xl font-semibold text-gray-900">-</p>
+                </div>
+                <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
+                    <p class="text-sm font-medium text-gray-500 truncate">Currently Active</p>
+                    <p id="stat-active" class="mt-1 text-3xl font-semibold text-gray-900">-</p>
+                </div>
+            </div>
+
+            <!-- Live Logs -->
+            <section class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+                <div class="p-4 border-b border-gray-200 flex justify-between items-center bg-gray-50">
+                    <h2 class="text-lg font-semibold">System Logs</h2>
+                    <div class="flex space-x-3">
+                        <select id="log-filter" class="block w-full pl-3 pr-10 py-1 text-base border-gray-300 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm rounded-md">
+                            <option value="all">All Events</option>
+                            <option value="info">Info</option>
+                            <option value="success">Success</option>
+                            <option value="warning">Warnings</option>
+                            <option value="error">Errors</option>
+                        </select>
+                        <button id="btn-refresh-logs" class="inline-flex items-center px-3 py-1.5 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50">
+                            Refresh
+                        </button>
+                    </div>
+                </div>
+                <div class="overflow-x-auto max-h-96 no-scrollbar">
+                    <table class="min-w-full divide-y divide-gray-200">
+                        <thead class="bg-gray-50 sticky top-0">
+                            <tr>
+                                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Timestamp</th>
+                                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Event</th>
+                                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Role</th>
+                                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Details</th>
+                            </tr>
+                        </thead>
+                        <tbody id="log-table-body" class="bg-white divide-y divide-gray-200 text-sm">
+                            <!-- Populated via JS -->
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+            <!-- File Management -->
+            <section>
+                <h2 class="text-lg font-semibold mb-4">Manage Storage</h2>
+                <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+                    <div id="admin-recordings-list" class="divide-y divide-gray-200 p-4 space-y-2">
+                        <p class="text-gray-500 text-sm py-4 text-center">Loading recordings...</p>
+                        <!-- Populated via JS -->
+                    </div>
+                </div>
+            </section>
+        </div>
+    </div>
+
+    <!-- MAIN JAVASCRIPT LOGIC -->
+    <script>
+        // ==========================================
+        // Configuration & State
+        // ==========================================
+        const WORKER_URL = "https://church-recorder-worker.YOUR_NAME.workers.dev"; // UPDATE THIS BEFORE DEPLOYMENT
+
+        let currentPassword = null;
+        let currentRole = null;
+        let currentJobId = null;
+        let statusInterval = null;
+        let countdownInterval = null;
+        let activeJobData = null;
+
+        // ==========================================
+        // Initialization
+        // ==========================================
+        document.addEventListener("DOMContentLoaded", () => {
+            document.getElementById("login-form").addEventListener("submit", handleLogin);
+            
+            document.getElementById("nav-recordings").addEventListener("click", () => switchTab('recordings'));
+            if (document.getElementById("nav-admin")) {
+                document.getElementById("nav-admin").addEventListener("click", () => switchTab('admin'));
+            }
+
+            document.getElementById("schedule-form").addEventListener("submit", handleScheduleRecording);
+            
+            const durationInput = document.getElementById("duration");
+            if (durationInput) {
+                durationInput.addEventListener("input", updateDurationHelper);
+            }
+            
+            const startNowCheckbox = document.getElementById("start-now");
+            if (startNowCheckbox) {
+                startNowCheckbox.addEventListener("change", (e) => {
+                    const timeInput = document.getElementById("start-time");
+                    timeInput.disabled = e.target.checked;
+                    if(e.target.checked) timeInput.value = "";
+                });
+            }
+
+            document.getElementById("btn-cancel-recording").addEventListener("click", cancelRecording);
+            document.getElementById("btn-refresh-logs").addEventListener("click", loadLogs);
+            document.getElementById("log-filter").addEventListener("change", loadLogs);
+            
+            // UI Helpers
+            updateDurationHelper();
+        });
+
+        // ==========================================
+        // API Helper
+        // ==========================================
+        async function apiCall(endpoint, method = "GET", body = null) {
+            const headers = {
+                "Content-Type": "application/json"
+            };
+            
+            if (currentPassword) {
+                headers["X-Password"] = currentPassword;
+            }
+
+            const options = {
+                method,
+                headers,
+            };
+
+            if (body) {
+                options.body = JSON.stringify(body);
+            }
+
+            const response = await fetch(`${WORKER_URL}${endpoint}`, options);
+            
+            if (!response.ok && response.status !== 401 && response.status !== 403) {
+                let errorMsg = response.statusText;
+                try {
+                    const errData = await response.json();
+                    if (errData.error) errorMsg = errData.error;
+                } catch (e) {}
+                throw new Error(errorMsg);
+            }
+            
+            return response;
+        }
+
+        // ==========================================
+        // Authentication
+        // ==========================================
+        async function handleLogin(e) {
+            e.preventDefault();
+            const pwdInput = document.getElementById("password").value;
+            const errorEl = document.getElementById("login-error");
+            const submitBtn = document.getElementById("login-submit");
+            
+            errorEl.classList.add("hidden");
+            submitBtn.disabled = true;
+            submitBtn.textContent = "Logging in...";
+
+            try {
+                currentPassword = pwdInput;
+                
+                const recRes = await apiCall("/recordings");
+                if (recRes.status === 401) {
+                    currentPassword = null;
+                    throw new Error("Incorrect password. Please try again.");
+                }
+                if (!recRes.ok) throw new Error("Failed to authenticate with the server.");
+
+                const logRes = await apiCall("/logs?limit=1");
+                if (logRes.status === 200) {
+                    currentRole = "admin";
+                } else if (logRes.status === 403) {
+                    currentRole = "user";
+                } else {
+                    throw new Error("Unexpected role verification response.");
+                }
+
+                showMainApp();
+
+            } catch (error) {
+                currentPassword = null;
+                errorEl.textContent = error.message;
+                errorEl.classList.remove("hidden");
+            } finally {
+                submitBtn.disabled = false;
+                submitBtn.textContent = "Log In";
+            }
+        }
+
+        // ==========================================
+        // Main App & Navigation
+        // ==========================================
+        function showMainApp() {
+            document.getElementById("login-screen").classList.add("hidden");
+            document.getElementById("main-app").classList.remove("hidden");
+            
+            if (currentRole === "admin") {
+                document.getElementById("nav-admin").classList.remove("hidden");
+                document.getElementById("nav-admin").classList.add("inline-block");
+            }
+
+            switchTab('recordings');
+            loadRecordings();
+        }
+
+        function switchTab(tabId) {
+            document.getElementById("tab-recordings").classList.toggle("hidden", tabId !== 'recordings');
+            document.getElementById("tab-admin").classList.toggle("hidden", tabId !== 'admin');
+            
+            const navRec = document.getElementById("nav-recordings");
+            const navAdmin = document.getElementById("nav-admin");
+            
+            if (tabId === 'recordings') {
+                navRec.classList.add("bg-white", "shadow", "text-gray-900");
+                navRec.classList.remove("text-gray-600");
+                navAdmin.classList.remove("bg-white", "shadow", "text-gray-900");
+                navAdmin.classList.add("text-gray-600");
+            } else {
+                navAdmin.classList.add("bg-white", "shadow", "text-gray-900");
+                navAdmin.classList.remove("text-gray-600");
+                navRec.classList.remove("bg-white", "shadow", "text-gray-900");
+                navRec.classList.add("text-gray-600");
+            }
+
+            if (tabId === 'admin') {
+                loadLogs();
+                loadAdminRecordings();
+            }
+        }
+
+        // ==========================================
+        // Scheduling Recordings
+        // ==========================================
+        function updateDurationHelper() {
+            const mins = parseInt(document.getElementById("duration").value, 10);
+            const helper = document.getElementById("duration-helper");
+            if (isNaN(mins) || mins <= 0) {
+                helper.textContent = "";
+                return;
+            }
+            const hours = Math.floor(mins / 60);
+            const remainingMins = mins % 60;
+            
+            let text = [];
+            if (hours > 0) text.push(`${hours} hr${hours > 1 ? 's' : ''}`);
+            if (remainingMins > 0 || hours === 0) text.push(`${remainingMins} min${remainingMins !== 1 ? 's' : ''}`);
+            
+            helper.textContent = `(~ ${text.join(' ')})`;
+        }
+
+        async function handleScheduleRecording(e) {
+            e.preventDefault();
+            
+            const errorEl = document.getElementById("schedule-error");
+            errorEl.classList.add("hidden");
+
+            const sessionName = document.getElementById("session-name").value.trim();
+            const recordingName = document.getElementById("recording-name").value.trim();
+            const duration = parseInt(document.getElementById("duration").value, 10);
+            const startNow = document.getElementById("start-now").checked;
+            const startTimeInput = document.getElementById("start-time").value;
+
+            if (!sessionName || !recordingName) {
+                return showScheduleError("Names cannot be empty.");
+            }
+            if (isNaN(duration) || duration <= 0) {
+                return showScheduleError("Please enter a valid duration in minutes.");
+            }
+            
+            let startTime;
+            if (startNow) {
+                startTime = new Date().toISOString();
+            } else {
+                if (!startTimeInput) return showScheduleError("Please select a start time or check 'Start immediately'.");
+                startTime = new Date(startTimeInput).toISOString();
+                if (new Date(startTime) < new Date()) {
+                    return showScheduleError("Start time cannot be in the past.");
+                }
+            }
+
+            const payload = {
+                sessionName,
+                recordingName,
+                startTime,
+                durationMinutes: duration
+            };
+
+            const submitBtn = document.getElementById("schedule-submit");
+            submitBtn.disabled = true;
+
+            try {
+                const res = await apiCall("/record", "POST", payload);
+                const data = await res.json();
+                
+                document.getElementById("schedule-form").reset();
+                document.getElementById("duration-helper").textContent = "";
+                document.getElementById("start-time").disabled = false;
+                
+                currentJobId = data.jobId || data.id; 
+                startPolling(currentJobId);
+                
+            } catch (error) {
+                showScheduleError(error.message);
+            } finally {
+                submitBtn.disabled = false;
+            }
+        }
+
+        function showScheduleError(msg) {
+            const errorEl = document.getElementById("schedule-error");
+            errorEl.textContent = msg;
+            errorEl.classList.remove("hidden");
+        }
+
+        // ==========================================
+        // Status & Polling Logic
+        // ==========================================
+        function startPolling(jobId) {
+            currentJobId = jobId;
+            document.getElementById("status-card").classList.remove("hidden");
+            
+            if (statusInterval) clearInterval(statusInterval);
+            if (countdownInterval) clearInterval(countdownInterval);
+            
+            countdownInterval = setInterval(updateCountdownUI, 1000);
+            fetchStatus();
+            statusInterval = setInterval(fetchStatus, 15000);
+        }
+
+        function stopPolling() {
+            if (statusInterval) clearInterval(statusInterval);
+            if (countdownInterval) clearInterval(countdownInterval);
+            statusInterval = null;
+            countdownInterval = null;
+            activeJobData = null;
+            currentJobId = null;
+            loadRecordings(); 
+        }
+
+        async function fetchStatus() {
+            if (!currentJobId) return;
+            try {
+                const res = await apiCall(`/status/${currentJobId}`);
+                if (!res.ok) throw new Error("Failed to fetch status");
+                const data = await res.json();
+                
+                activeJobData = data;
+                updateStatusCardData(data);
+
+                const s = data.status.toLowerCase();
+                if (s === 'done' || s === 'error' || s === 'cancelled' || s === 'canceled') {
+                    stopPolling();
+                }
+            } catch (e) {
+                console.error("Status polling error:", e);
+            }
+        }
+
+        function updateStatusCardData(data) {
+            document.getElementById("status-name").textContent = data.recordingName || "Unknown Recording";
+            
+            const iconEl = document.getElementById("status-icon");
+            const labelEl = document.getElementById("status-label");
+            const downloadBtn = document.getElementById("btn-status-download");
+            const cancelBtn = document.getElementById("btn-cancel-recording");
+            const errorText = document.getElementById("status-error-text");
+            const progressContainer = document.getElementById("status-progress-container");
+            
+            const status = data.status.toLowerCase();
+            
+            downloadBtn.classList.add("hidden");
+            cancelBtn.classList.add("hidden");
+            errorText.classList.add("hidden");
+            progressContainer.classList.add("hidden");
+            iconEl.className = "text-4xl w-12 h-12 flex items-center justify-center"; 
+
+            switch(status) {
+                case 'pending':
+                    iconEl.innerHTML = "⏳"; 
+                    labelEl.textContent = "Pending";
+                    labelEl.className = "font-medium text-gray-800";
+                    cancelBtn.classList.remove("hidden");
+                    break;
+                case 'recording':
+                    iconEl.innerHTML = "🔴"; 
+                    iconEl.classList.add("pulse");
+                    labelEl.textContent = "Recording Live";
+                    labelEl.className = "font-medium text-red-700";
+                    cancelBtn.classList.remove("hidden");
+                    progressContainer.classList.remove("hidden");
+                    break;
+                case 'uploading':
+                    iconEl.innerHTML = "🔄"; 
+                    iconEl.classList.add("spin");
+                    labelEl.textContent = "Uploading to Storage";
+                    labelEl.className = "font-medium text-blue-700";
+                    break;
+                case 'done':
+                    iconEl.innerHTML = "✅"; 
+                    labelEl.textContent = "Done";
+                    labelEl.className = "font-medium text-green-700";
+                    if (data.downloadUrl) {
+                        downloadBtn.href = data.downloadUrl;
+                        downloadBtn.classList.remove("hidden");
+                    }
+                    break;
+                case 'error':
+                    iconEl.innerHTML = "❌"; 
+                    labelEl.textContent = "Error";
+                    labelEl.className = "font-medium text-red-700";
+                    errorText.textContent = data.errorMessage || "An unknown error occurred.";
+                    errorText.classList.remove("hidden");
+                    break;
+                default:
+                    iconEl.innerHTML = "❓";
+                    labelEl.textContent = status;
+            }
+            
+            updateCountdownUI(); 
+        }
+
+        function updateCountdownUI() {
+            if (!activeJobData) return;
+            
+            const timerEl = document.getElementById("status-timer");
+            const progressBar = document.getElementById("status-progress-bar");
+            
+            const now = new Date().getTime();
+            const startTime = new Date(activeJobData.startTime).getTime();
+            const durationMs = (activeJobData.durationMinutes || 0) * 60 * 1000;
+            const endTime = startTime + durationMs;
+            const status = activeJobData.status.toLowerCase();
+
+            if (status === 'pending') {
+                const diff = startTime - now;
+                if (diff > 0) {
+                    timerEl.textContent = `• Starts in: ${formatTimeDiff(diff)}`;
+                } else {
+                    timerEl.textContent = "• Starting momentarily...";
+                }
+            } else if (status === 'recording') {
+                const diff = endTime - now;
+                if (diff > 0) {
+                    timerEl.textContent = `• Remaining: ${formatTimeDiff(diff)}`;
+                    const percent = Math.min(100, Math.max(0, ((now - startTime) / durationMs) * 100));
+                    progressBar.style.width = `${percent}%`;
+                } else {
+                    timerEl.textContent = "• Finishing up...";
+                    progressBar.style.width = "100%";
+                }
+            } else {
+                timerEl.textContent = "";
+            }
+        }
+
+        async function cancelRecording() {
+            if (!currentJobId) return;
+            if (!confirm("Are you sure you want to cancel this recording?")) return;
+
+            try {
+                const res = await apiCall(`/recordings/${currentJobId}`, "DELETE");
+                if (!res.ok) throw new Error("Failed to cancel recording");
+                
+                stopPolling();
+                document.getElementById("status-card").classList.add("hidden");
+            } catch (e) {
+                alert("Error cancelling: " + e.message);
+            }
+        }
+
+        // ==========================================
+        // Recordings List
+        // ==========================================
+        async function loadRecordings() {
+            try {
+                const res = await apiCall("/recordings");
+                if (!res.ok) throw new Error("Failed to fetch recordings");
+                let recordings = await res.json();
+                
+                recordings.sort((a, b) => new Date(b.startTime) - new Date(a.startTime));
+                
+                const listEl = document.getElementById("recordings-list");
+                listEl.innerHTML = "";
+
+                if (!currentJobId) {
+                    const activeRec = recordings.find(r => ['pending', 'recording', 'uploading'].includes(r.status.toLowerCase()));
+                    if (activeRec) {
+                        startPolling(activeRec.id || activeRec.jobId);
+                    }
+                }
+
+                if (recordings.length === 0) {
+                    listEl.innerHTML = "<p class='text-gray-500 text-sm py-4 text-center'>No past recordings found.</p>";
+                    return;
+                }
+
+                recordings.forEach(rec => {
+                    const div = document.createElement("div");
+                    div.className = "py-4 flex justify-between items-center";
+                    
+                    let downloadHtml = "";
+                    if (rec.status.toLowerCase() === 'done' && rec.downloadUrl) {
+                        downloadHtml = `<a href="${rec.downloadUrl}" target="_blank" class="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded shadow-sm text-white bg-blue-600 hover:bg-blue-700">Download</a>`;
+                    }
+
+                    div.innerHTML = `
+                        <div class="flex-1 min-w-0 pr-4">
+                            <h4 class="text-sm font-medium text-gray-900 truncate">${escapeHtml(rec.recordingName)}</h4>
+                            <div class="mt-1 flex items-center space-x-2 text-xs text-gray-500">
+                                <span>${new Date(rec.startTime).toLocaleString(undefined, {month:'short', day:'numeric', hour:'numeric', minute:'2-digit'})}</span>
+                                <span>&bull;</span>
+                                <span>${rec.durationMinutes} min</span>
+                                <span>&bull;</span>
+                                <span class="badge badge-${rec.status.toLowerCase()}">${rec.status}</span>
+                            </div>
+                        </div>
+                        <div class="flex-shrink-0">
+                            ${downloadHtml}
+                        </div>
+                    `;
+                    listEl.appendChild(div);
+                });
+
+            } catch (e) {
+                console.error("Load recordings error:", e);
+                document.getElementById("recordings-list").innerHTML = "<p class='text-red-500 text-sm py-4 text-center'>Failed to load recordings.</p>";
+            }
+        }
+
+        // ==========================================
+        // Admin Functionality
+        // ==========================================
+        async function loadLogs() {
+            if (currentRole !== 'admin') return;
+
+            const filterVal = document.getElementById("log-filter").value;
+            const tbody = document.getElementById("log-table-body");
+            tbody.innerHTML = "<tr><td colspan='4' class='px-6 py-4 text-center text-sm text-gray-500'>Loading logs...</td></tr>";
+
+            try {
+                const res = await apiCall("/logs?limit=200");
+                if (!res.ok) throw new Error("Failed to load logs");
+                let logs = await res.json();
+
+                updateAdminStats(logs);
+
+                if (filterVal !== "all") {
+                    logs = logs.filter(l => (l.level || "info").toLowerCase() === filterVal);
+                }
+
+                tbody.innerHTML = "";
+                if (logs.length === 0) {
+                    tbody.innerHTML = "<tr><td colspan='4' class='px-6 py-4 text-center text-sm text-gray-500'>No logs found.</td></tr>";
+                    return;
+                }
+
+                logs.forEach(log => {
+                    const tr = document.createElement("tr");
+                    const level = (log.level || 'info').toLowerCase();
+                    const badgeClass = getBadgeClassForLevel(level);
+                    
+                    let details = log.details || {};
+                    let detailsText = typeof details === 'string' ? details : JSON.stringify(details);
+                    
+                    if (log.event === 'record_finish' && details.fileSize) detailsText = `Size: ${details.fileSize}`;
+                    if (log.event === 'login_fail') detailsText = `Wrong password attempt`;
+
+                    tr.innerHTML = `
+                        <td class="px-6 py-4 whitespace-nowrap text-xs text-gray-500">${new Date(log.timestamp).toLocaleString()}</td>
+                        <td class="px-6 py-4 whitespace-nowrap"><span class="badge ${badgeClass}">${escapeHtml(log.event || level)}</span></td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${escapeHtml(log.role || 'system')}</td>
+                        <td class="px-6 py-4 text-sm text-gray-500 truncate max-w-xs" title="${escapeHtml(detailsText)}">${escapeHtml(detailsText)}</td>
+                    `;
+                    tbody.appendChild(tr);
+                });
+
+            } catch (e) {
+                tbody.innerHTML = `<tr><td colspan='4' class="px-6 py-4 text-center text-sm text-red-500">Failed to load logs: ${e.message}</td></tr>`;
+            }
+        }
+
+        async function loadAdminRecordings() {
+            if (currentRole !== 'admin') return;
+            
+            try {
+                const res = await apiCall("/recordings");
+                if (!res.ok) throw new Error();
+                let recordings = await res.json();
+                
+                recordings.sort((a, b) => new Date(b.startTime) - new Date(a.startTime));
+                const listEl = document.getElementById("admin-recordings-list");
+                listEl.innerHTML = "";
+
+                if(recordings.length === 0) {
+                     listEl.innerHTML = "<p class='text-gray-500 text-sm py-4 text-center'>No storage items found.</p>";
+                     return;
+                }
+
+                recordings.forEach(rec => {
+                    const div = document.createElement("div");
+                    div.className = "py-3 flex justify-between items-center";
+                    div.innerHTML = `
+                        <div class="flex-1 min-w-0 pr-4">
+                            <p class="text-sm font-medium text-gray-900 truncate">${escapeHtml(rec.recordingName)}</p>
+                            <p class="text-xs text-gray-500 mt-1">ID: ${rec.id || rec.jobId} &bull; ${rec.status}</p>
+                        </div>
+                        <button class="ml-4 inline-flex items-center px-2.5 py-1.5 border border-red-300 shadow-sm text-xs font-medium rounded text-red-700 bg-white hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500" onclick="deleteRecording('${rec.id || rec.jobId}')">Delete</button>
+                    `;
+                    listEl.appendChild(div);
+                });
+
+            } catch (e) {
+                document.getElementById("admin-recordings-list").innerHTML = "<p class='text-red-500 text-sm py-4 text-center'>Error loading storage management.</p>";
+            }
+        }
+
+        function updateAdminStats(logs) {
+            apiCall("/recordings").then(res => res.json()).then(recordings => {
+                const total = recordings.length;
+                
+                const currentMonth = new Date().getMonth();
+                const currentYear = new Date().getFullYear();
+                const thisMonth = recordings.filter(r => {
+                    const d = new Date(r.startTime);
+                    return d.getMonth() === currentMonth && d.getFullYear() === currentYear;
+                }).length;
+
+                const active = recordings.filter(r => ['recording', 'pending', 'uploading'].includes(r.status.toLowerCase())).length;
+
+                document.getElementById("stat-total").textContent = total;
+                document.getElementById("stat-month").textContent = thisMonth;
+                document.getElementById("stat-active").textContent = active > 0 ? active + ' Job(s)' : 'None';
+            }).catch(e => console.error("Stats error", e));
+        }
+
+        window.deleteRecording = async function(id) {
+            if (!confirm("This will permanently delete the file from storage. Are you sure?")) return;
+            
+            try {
+                const res = await apiCall(`/recordings/${id}`, "DELETE");
+                if (!res.ok) throw new Error("Delete failed");
+                
+                loadAdminRecordings();
+                loadRecordings(); 
+            } catch (e) {
+                alert("Error deleting recording: " + e.message);
+            }
+        };
+
+        // ==========================================
+        // Utility Formatters
+        // ==========================================
+        function formatTimeDiff(ms) {
+            const totalSecs = Math.floor(ms / 1000);
+            const h = Math.floor(totalSecs / 3600);
+            const m = Math.floor((totalSecs % 3600) / 60);
+            const s = totalSecs % 60;
+            
+            return [h, m, s]
+                .map(v => v < 10 ? "0" + v : v)
+                .filter((v, i) => v !== "00" || i > 0)
+                .join(":");
+        }
+
+        function getBadgeClassForLevel(level) {
+            switch(level) {
+                case 'success': return 'badge-success';
+                case 'error': return 'badge-danger';
+                case 'warning': return 'badge-warning';
+                default: return 'badge-info';
+            }
+        }
+
+        function escapeHtml(unsafe) {
+            if (!unsafe) return "";
+            return unsafe
+                 .toString()
+                 .replace(/&/g, "&amp;")
+                 .replace(/</g, "&lt;")
+                 .replace(/>/g, "&gt;")
+                 .replace(/"/g, "&quot;")
+                 .replace(/'/g, "&#039;");
+        }
+    </script>
+</body>
+</html>
