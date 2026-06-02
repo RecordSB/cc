@@ -49,7 +49,7 @@
     <div id="login-screen" class="flex items-center justify-center min-h-screen">
         <div class="bg-white p-8 rounded-xl shadow-lg max-w-sm w-full">
             <div class="text-center mb-6">
-                <h1 class="text-2xl font-bold text-gray-800">Livestream Recorder</h1>
+                <h1 class="text-2xl font-bold text-gray-800">St. Bernadette Livestream Recorder</h1>
                 <p class="text-gray-500 text-sm mt-1">Please log in to continue</p>
             </div>
             <form id="login-form" class="space-y-4">
@@ -70,7 +70,7 @@
     <!-- MAIN APP -->
     <div id="main-app" class="hidden max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <header class="flex justify-between items-center mb-8">
-            <h1 class="text-3xl font-bold text-gray-900 tracking-tight">Livestream Recorder</h1>
+            <h1 class="text-3xl font-bold text-gray-900 tracking-tight">St. Bernadette Livestream Recorder</h1>
             <nav class="flex space-x-2 bg-gray-200 p-1 rounded-lg">
                 <button id="nav-recordings" class="px-4 py-2 text-sm font-medium rounded-md transition-colors active bg-white shadow text-gray-900">Recordings</button>
                 <button id="nav-admin" class="hidden px-4 py-2 text-sm font-medium rounded-md transition-colors text-gray-600 hover:text-gray-900">Admin</button>
@@ -634,60 +634,60 @@
         // Recordings List
         // ==========================================
         async function loadRecordings() {
-            try {
-                const res = await apiCall("/recordings");
-                if (!res.ok) throw new Error("Failed to fetch recordings");
-                let recordings = await res.json();
-                
-                recordings.sort((a, b) => new Date(b.startTime) - new Date(a.startTime));
-                
-                const listEl = document.getElementById("recordings-list");
-                listEl.innerHTML = "";
+    try {
+        const res = await apiCall("/recordings");
+        if (!res.ok) throw new Error("Failed to fetch recordings");
+        let recordings = await res.json();
+        
+        recordings.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+        
+        const listEl = document.getElementById("recordings-list");
+        listEl.innerHTML = "";
 
-                if (!currentJobId) {
-                    const activeRec = recordings.find(r => ['pending', 'recording', 'uploading'].includes(r.status.toLowerCase()));
-                    if (activeRec) {
-                        startPolling(activeRec.id || activeRec.jobId);
-                    }
-                }
-
-                if (recordings.length === 0) {
-                    listEl.innerHTML = "<p class='text-gray-500 text-sm py-4 text-center'>No past recordings found.</p>";
-                    return;
-                }
-
-                recordings.forEach(rec => {
-                    const div = document.createElement("div");
-                    div.className = "py-4 flex justify-between items-center";
-                    
-                    let downloadHtml = "";
-                    if (rec.status.toLowerCase() === 'done' && rec.downloadUrl) {
-                        downloadHtml = `<a href="${rec.downloadUrl}" target="_blank" class="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded shadow-sm text-white bg-blue-600 hover:bg-blue-700">Download</a>`;
-                    }
-
-                    div.innerHTML = `
-                        <div class="flex-1 min-w-0 pr-4">
-                            <h4 class="text-sm font-medium text-gray-900 truncate">${escapeHtml(rec.recordingName)}</h4>
-                            <div class="mt-1 flex items-center space-x-2 text-xs text-gray-500">
-                                <span>${new Date(rec.startTime).toLocaleString(undefined, {month:'short', day:'numeric', hour:'numeric', minute:'2-digit'})}</span>
-                                <span>&bull;</span>
-                                <span>${rec.durationMinutes} min</span>
-                                <span>&bull;</span>
-                                <span class="badge badge-${rec.status.toLowerCase()}">${rec.status}</span>
-                            </div>
-                        </div>
-                        <div class="flex-shrink-0">
-                            ${downloadHtml}
-                        </div>
-                    `;
-                    listEl.appendChild(div);
-                });
-
-            } catch (e) {
-                console.error("Load recordings error:", e);
-                document.getElementById("recordings-list").innerHTML = "<p class='text-red-500 text-sm py-4 text-center'>Failed to load recordings.</p>";
+        if (!currentJobId) {
+            const activeRec = recordings.find(r => ['pending', 'recording', 'uploading'].includes(r.status.toLowerCase()));
+            if (activeRec) {
+                startPolling(activeRec.id || activeRec.jobId);
             }
         }
+
+        if (recordings.length === 0) {
+            listEl.innerHTML = "<p class='text-gray-500 text-sm py-4 text-center'>No past recordings found.</p>";
+            return;
+        }
+
+        recordings.forEach(rec => {
+            const div = document.createElement("div");
+            div.className = "py-4 flex justify-between items-center";
+            
+            let downloadHtml = "";
+            if (rec.status.toLowerCase() === 'done' && rec.download_url) {
+                downloadHtml = `<a href="${rec.download_url}" target="_blank" class="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded shadow-sm text-white bg-blue-600 hover:bg-blue-700">Download</a>`;
+            }
+
+            div.innerHTML = `
+                <div class="flex-1 min-w-0 pr-4">
+                    <h4 class="text-sm font-medium text-gray-900 truncate">${escapeHtml(rec.recording_name)}</h4>
+                    <div class="mt-1 flex items-center space-x-2 text-xs text-gray-500">
+                        <span>${new Date(rec.created_at).toLocaleString(undefined, {month:'short', day:'numeric', hour:'numeric', minute:'2-digit'})}</span>
+                        <span>&bull;</span>
+                        <span>${rec.duration_minutes} min</span>
+                        <span>&bull;</span>
+                        <span class="badge badge-${rec.status.toLowerCase()}">${rec.status}</span>
+                    </div>
+                </div>
+                <div class="flex-shrink-0">
+                    ${downloadHtml}
+                </div>
+            `;
+            listEl.appendChild(div);
+        });
+
+    } catch (e) {
+        console.error("Load recordings error:", e);
+        document.getElementById("recordings-list").innerHTML = "<p class='text-red-500 text-sm py-4 text-center'>Failed to load recordings.</p>";
+    }
+}
 
         // ==========================================
         // Admin Functionality
