@@ -458,7 +458,7 @@
                 document.getElementById("duration-helper").textContent = "";
                 document.getElementById("start-time").disabled = false;
                 
-                currentJobId = data.jobId || data.id; 
+                currentJobId = data.job_id || data.id; 
                 startPolling(currentJobId);
                 
             } catch (error) {
@@ -519,7 +519,7 @@
         }
 
         function updateStatusCardData(data) {
-            document.getElementById("status-name").textContent = data.recordingName || "Unknown Recording";
+            document.getElementById("status-name").textContent = data.recording_name || "Unknown Recording";
             
             const iconEl = document.getElementById("status-icon");
             const labelEl = document.getElementById("status-label");
@@ -561,8 +561,8 @@
                     iconEl.innerHTML = "✅"; 
                     labelEl.textContent = "Done";
                     labelEl.className = "font-medium text-green-700";
-                    if (data.downloadUrl) {
-                        downloadBtn.href = data.downloadUrl;
+                    if (data.download_url) {
+                        downloadBtn.href = data.download_url;
                         downloadBtn.classList.remove("hidden");
                     }
                     break;
@@ -570,7 +570,7 @@
                     iconEl.innerHTML = "❌"; 
                     labelEl.textContent = "Error";
                     labelEl.className = "font-medium text-red-700";
-                    errorText.textContent = data.errorMessage || "An unknown error occurred.";
+                    errorText.textContent = data.error_message || "An unknown error occurred.";
                     errorText.classList.remove("hidden");
                     break;
                 default:
@@ -588,8 +588,8 @@
             const progressBar = document.getElementById("status-progress-bar");
             
             const now = new Date().getTime();
-            const startTime = new Date(activeJobData.startTime).getTime();
-            const durationMs = (activeJobData.durationMinutes || 0) * 60 * 1000;
+            const startTime = new Date(activeJobData.start_time).getTime();
+            const durationMs = (activeJobData.duration_minutes || 0) * 60 * 1000;
             const endTime = startTime + durationMs;
             const status = activeJobData.status.toLowerCase();
 
@@ -634,64 +634,73 @@
         // Recordings List
         // ==========================================
         async function loadRecordings() {
-    try {
-        const res = await apiCall("/recordings");
-        if (!res.ok) throw new Error("Failed to fetch recordings");
-        let recordings = await res.json();
-        
-        recordings.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
-        
-        const listEl = document.getElementById("recordings-list");
-        listEl.innerHTML = "";
+            try {
+                const res = await apiCall("/recordings");
+                if (!res.ok) throw new Error("Failed to fetch recordings");
+                let recordings = await res.json();
+                
+                recordings.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+                
+                const listEl = document.getElementById("recordings-list");
+                listEl.innerHTML = "";
 
-        if (!currentJobId) {
-            const activeRec = recordings.find(r => ['pending', 'recording', 'uploading'].includes(r.status.toLowerCase()));
-            if (activeRec) {
-                startPolling(activeRec.id || activeRec.jobId);
+                if (!currentJobId) {
+                    const activeRec = recordings.find(r => ['pending', 'recording', 'uploading'].includes(r.status.toLowerCase()));
+                    if (activeRec) {
+                        startPolling(activeRec.id || activeRec.job_id);
+                    }
+                }
+
+                if (recordings.length === 0) {
+                    listEl.innerHTML = "<p class='text-gray-500 text-sm py-4 text-center'>No past recordings found.</p>";
+                    return;
+                }
+
+                recordings.forEach(rec => {
+                    const div = document.createElement("div");
+                    div.className = "py-4 flex justify-between items-center";
+                    
+                    let downloadHtml = "";
+                    if (rec.status.toLowerCase() === 'done' && rec.download_url) {
+                        downloadHtml = `<a href="${rec.download_url}" target="_blank" class="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded shadow-sm text-white bg-blue-600 hover:bg-blue-700">Download</a>`;
+                    }
+
+                    div.innerHTML = `
+                        <div class="flex-1 min-w-0 pr-4">
+                            <h4 class="text-sm font-medium text-gray-900 truncate">${escapeHtml(rec.recording_name)}</h4>
+                            <div class="mt-1 flex items-center space-x-2 text-xs text-gray-500">
+                                <span>${new Date(rec.created_at).toLocaleString(undefined, {month:'short', day:'numeric', hour:'numeric', minute:'2-digit'})}</span>
+                                <span>&bull;</span>
+                                <span>${rec.duration_minutes} min</span>
+                                <span>&bull;</span>
+                                <span class="badge badge-${rec.status.toLowerCase()}">${rec.status}</span>
+                            </div>
+                        </div>
+                        <div class="flex-shrink-0">
+                            ${downloadHtml}
+                        </div>
+                    `;
+                    listEl.appendChild(div);
+                });
+
+            } catch (e) {
+                console.error("Load recordings error:", e);
+                document.getElementById("recordings-list").innerHTML = "<p class='text-red-500 text-sm py-4 text-center'>Failed to load recordings.</p>";
             }
         }
-
-        if (recordings.length === 0) {
-            listEl.innerHTML = "<p class='text-gray-500 text-sm py-4 text-center'>No past recordings found.</p>";
-            return;
-        }
-
-        recordings.forEach(rec => {
-            const div = document.createElement("div");
-            div.className = "py-4 flex justify-between items-center";
-            
-            let downloadHtml = "";
-            if (rec.status.toLowerCase() === 'done' && rec.download_url) {
-                downloadHtml = `<a href="${rec.download_url}" target="_blank" class="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded shadow-sm text-white bg-blue-600 hover:bg-blue-700">Download</a>`;
-            }
-
-            div.innerHTML = `
-                <div class="flex-1 min-w-0 pr-4">
-                    <h4 class="text-sm font-medium text-gray-900 truncate">${escapeHtml(rec.recording_name)}</h4>
-                    <div class="mt-1 flex items-center space-x-2 text-xs text-gray-500">
-                        <span>${new Date(rec.created_at).toLocaleString(undefined, {month:'short', day:'numeric', hour:'numeric', minute:'2-digit'})}</span>
-                        <span>&bull;</span>
-                        <span>${rec.duration_minutes} min</span>
-                        <span>&bull;</span>
-                        <span class="badge badge-${rec.status.toLowerCase()}">${rec.status}</span>
-                    </div>
-                </div>
-                <div class="flex-shrink-0">
-                    ${downloadHtml}
-                </div>
-            `;
-            listEl.appendChild(div);
-        });
-
-    } catch (e) {
-        console.error("Load recordings error:", e);
-        document.getElementById("recordings-list").innerHTML = "<p class='text-red-500 text-sm py-4 text-center'>Failed to load recordings.</p>";
-    }
-}
 
         // ==========================================
         // Admin Functionality
         // ==========================================
+        function deriveLevel(eventType) {
+            if (!eventType) return 'info';
+            const et = eventType.toLowerCase();
+            if (et.includes('error') || et.includes('bad') || et.includes('fail') || et.includes('unauthorized')) return 'error';
+            if (et.includes('finish') || et.includes('complete') || et === 'record_start') return 'success';
+            if (et.includes('cancel') || et.includes('delete')) return 'warning';
+            return 'info';
+        }
+
         async function loadLogs() {
             if (currentRole !== 'admin') return;
 
@@ -707,7 +716,7 @@
                 updateAdminStats(logs);
 
                 if (filterVal !== "all") {
-                    logs = logs.filter(l => (l.level || "info").toLowerCase() === filterVal);
+                    logs = logs.filter(l => deriveLevel(l.event_type) === filterVal);
                 }
 
                 tbody.innerHTML = "";
@@ -718,18 +727,18 @@
 
                 logs.forEach(log => {
                     const tr = document.createElement("tr");
-                    const level = (log.level || 'info').toLowerCase();
+                    const level = deriveLevel(log.event_type);
                     const badgeClass = getBadgeClassForLevel(level);
                     
                     let details = log.details || {};
                     let detailsText = typeof details === 'string' ? details : JSON.stringify(details);
                     
-                    if (log.event === 'record_finish' && details.fileSize) detailsText = `Size: ${details.fileSize}`;
-                    if (log.event === 'login_fail') detailsText = `Wrong password attempt`;
+                    if (log.event_type === 'record_finish' && details.size_mb) detailsText = `Size: ${details.size_mb} MB`;
+                    if (log.event_type === 'login_fail') detailsText = `Wrong password attempt`; // Handles legacy strings if applicable
 
                     tr.innerHTML = `
                         <td class="px-6 py-4 whitespace-nowrap text-xs text-gray-500">${new Date(log.timestamp).toLocaleString()}</td>
-                        <td class="px-6 py-4 whitespace-nowrap"><span class="badge ${badgeClass}">${escapeHtml(log.event || level)}</span></td>
+                        <td class="px-6 py-4 whitespace-nowrap"><span class="badge ${badgeClass}">${escapeHtml(log.event_type)}</span></td>
                         <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${escapeHtml(log.role || 'system')}</td>
                         <td class="px-6 py-4 text-sm text-gray-500 truncate max-w-xs" title="${escapeHtml(detailsText)}">${escapeHtml(detailsText)}</td>
                     `;
@@ -749,7 +758,7 @@
                 if (!res.ok) throw new Error();
                 let recordings = await res.json();
                 
-                recordings.sort((a, b) => new Date(b.startTime) - new Date(a.startTime));
+                recordings.sort((a, b) => new Date(b.start_time) - new Date(a.start_time));
                 const listEl = document.getElementById("admin-recordings-list");
                 listEl.innerHTML = "";
 
@@ -763,10 +772,10 @@
                     div.className = "py-3 flex justify-between items-center";
                     div.innerHTML = `
                         <div class="flex-1 min-w-0 pr-4">
-                            <p class="text-sm font-medium text-gray-900 truncate">${escapeHtml(rec.recordingName)}</p>
-                            <p class="text-xs text-gray-500 mt-1">ID: ${rec.id || rec.jobId} &bull; ${rec.status}</p>
+                            <p class="text-sm font-medium text-gray-900 truncate">${escapeHtml(rec.recording_name)}</p>
+                            <p class="text-xs text-gray-500 mt-1">ID: ${rec.id || rec.job_id} &bull; ${rec.status}</p>
                         </div>
-                        <button class="ml-4 inline-flex items-center px-2.5 py-1.5 border border-red-300 shadow-sm text-xs font-medium rounded text-red-700 bg-white hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500" onclick="deleteRecording('${rec.id || rec.jobId}')">Delete</button>
+                        <button class="ml-4 inline-flex items-center px-2.5 py-1.5 border border-red-300 shadow-sm text-xs font-medium rounded text-red-700 bg-white hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500" onclick="deleteRecording('${rec.id || rec.job_id}')">Delete</button>
                     `;
                     listEl.appendChild(div);
                 });
@@ -783,7 +792,7 @@
                 const currentMonth = new Date().getMonth();
                 const currentYear = new Date().getFullYear();
                 const thisMonth = recordings.filter(r => {
-                    const d = new Date(r.startTime);
+                    const d = new Date(r.start_time);
                     return d.getMonth() === currentMonth && d.getFullYear() === currentYear;
                 }).length;
 
