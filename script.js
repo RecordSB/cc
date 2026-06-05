@@ -495,6 +495,11 @@ function updateStatusCardData(data) {
 			if (labelEl) { labelEl.textContent = "Done"; labelEl.className = "font-medium text-green-700"; }
 			const dl = data.downloadUrl || data.download_url;
 			if (dl && downloadBtn) { downloadBtn.href = dl; downloadBtn.classList.remove("hidden"); }
+			if (dl && downloadBtn) {
+				// route through backend to track downloads
+				downloadBtn.href = `${WORKER_URL}/download/${data.id || data.jobId}`;
+				downloadBtn.classList.remove("hidden");
+			}
 			break;
 		case 'error':
 			if (iconEl) iconEl.innerHTML = "❌";
@@ -570,7 +575,11 @@ function renderActiveStatusCards(recordings) {
 		}
 
 		const dl = rec.downloadUrl || rec.download_url;
-		if (dl) { downloadEl.href = dl; downloadEl.classList.remove('hidden'); }
+		if (dl) {
+			// Route downloads through the backend to track counts
+			downloadEl.href = `${WORKER_URL}/download/${id}`;
+			downloadEl.classList.remove('hidden');
+		}
 
 		cancelEl.addEventListener('click', () => cancelRecordingFor(id));
 
@@ -684,8 +693,9 @@ async function loadRecordings() {
 
 			let downloadHtml = "";
 			const downloadUrl = rec.download_url || rec.downloadUrl;
-			if (!isDeleted && downloadUrl) {
-				downloadHtml = `<a href="${downloadUrl}" target="_blank" class="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded shadow-sm text-white bg-blue-600 hover:bg-blue-700">Download</a>`;
+			if (!isDeleted && (rec.download_url || rec.downloadUrl)) {
+				const href = `${WORKER_URL}/download/${rec.id || rec.jobId}`;
+				downloadHtml = `<a href="${href}" target="_blank" class="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded shadow-sm text-white bg-blue-600 hover:bg-blue-700">Download</a>`;
 			}
 
 			const createdAt = rec.created_at || rec.startTime || rec.start_time;
@@ -727,6 +737,7 @@ async function loadRecordings() {
 						<span class="badge badge-${(status||'')}">${escapeHtml(rec.status || '')}</span>
 						${autodeleteHtml}
 					</div>
+					<p class="text-xs text-gray-500 mt-1">Downloads: ${escapeHtml(String(rec.download_count || rec.downloadCount || 0))}</p>
 				</div>
 				<div class="flex-shrink-0">
 					${downloadHtml}
@@ -818,6 +829,7 @@ async function loadAdminRecordings() {
 				<div class="flex-1 min-w-0 pr-4">
 					<p class="text-sm font-medium text-gray-900 truncate">${escapeHtml(rec.recordingName || rec.recording_name || '')}</p>
 					<p class="text-xs text-gray-500 mt-1">ID: ${rec.id || rec.jobId} &bull; ${escapeHtml(rec.status || '')}</p>
+					<p class="text-xs text-gray-500 mt-1">Downloads: ${escapeHtml(String(rec.download_count || rec.downloadCount || 0))}</p>
 				</div>
 				${deleteBtnHtml}
 			`;
