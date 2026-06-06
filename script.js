@@ -457,6 +457,7 @@ async function fetchStatus() {
 }
 
 function updateStatusCardData(data) {
+    // Note: This function only runs if using the legacy single #status-card approach
 	const nameEl = document.getElementById("status-name"); if (nameEl) nameEl.textContent = data.recordingName || data.recording_name || "Unknown Recording";
 
 	const iconEl = document.getElementById("status-icon");
@@ -468,7 +469,10 @@ function updateStatusCardData(data) {
 
 	const status = (data.status || '').toString().toLowerCase();
 
-	if (downloadBtn) downloadBtn.classList.add("hidden");
+	if (downloadBtn) {
+		downloadBtn.classList.add("hidden");
+		downloadBtn.style.display = "none";
+	}
 	if (cancelBtn) cancelBtn.classList.add("hidden");
 	if (errorText) errorText.classList.add("hidden");
 	if (progressContainer) progressContainer.classList.add("hidden");
@@ -497,6 +501,7 @@ function updateStatusCardData(data) {
 			if (dl && downloadBtn) {
 				downloadBtn.href = '#';
 				downloadBtn.onclick = (ev) => { ev.preventDefault(); downloadRecording(data.id || data.jobId, data.recording_name || data.recordingName); };
+				downloadBtn.style.display = ""; // remove inline none
 				downloadBtn.classList.remove("hidden");
 			}
 			break;
@@ -541,45 +546,68 @@ function renderActiveStatusCards(recordings) {
 		section.setAttribute('data-start-time', rec.startTime || rec.start_time || rec.created_at || '');
 		section.setAttribute('data-duration-minutes', (rec.durationMinutes || rec.duration_minutes || 0));
 
+		// Find structural elements
 		const nameEl = node.querySelector('.status-name');
 		const iconEl = node.querySelector('.status-icon');
 		const labelEl = node.querySelector('.status-label');
-		const timerEl = node.querySelector('.status-timer');
-		const downloadEl = node.querySelector('.btn-download');
-		const cancelEl = node.querySelector('.btn-cancel');
-		const errorEl = node.querySelector('.status-error-text');
-		const progressContainer = node.querySelector('.status-progress-container');
-		const progressBar = node.querySelector('.status-progress-bar');
+		
+		// --------------------------------------------------------------------------------------
+		// FIX: Completely REMOVE the download button from the DOM for active cards.
+		// Because the index.html template uses Tailwind responsive classes (sm:inline-block),
+		// simply adding `.hidden` fails on desktop. Removing it guarantees it cannot appear.
+		// --------------------------------------------------------------------------------------
+		const downloadElements = node.querySelectorAll('.btn-download, a, button');
+		downloadElements.forEach(el => {
+			const text = (el.textContent || '').toLowerCase();
+			const cls = (el.className || '').toString().toLowerCase();
+			if (text.includes('download') || cls.includes('download')) {
+				el.remove(); 
+			}
+		});
 
-		// FIX: Always explicitly hide buttons/containers initially since they might not be hidden in the template
-		if (downloadEl) downloadEl.classList.add('hidden');
-		if (cancelEl) cancelEl.classList.add('hidden');
-		if (progressContainer) progressContainer.classList.add('hidden');
-		if (errorEl) errorEl.classList.add('hidden');
-
-		nameEl.textContent = rec.recordingName || rec.recording_name || '';
-		const status = ((rec.status||'')+"").toLowerCase();
-
-		// set visuals based on status
-		if (status === 'pending') {
-			iconEl.textContent = '⏳';
-			labelEl.textContent = 'Pending';
-			if (cancelEl) cancelEl.classList.remove('hidden');
-		} else if (status === 'recording') {
-			iconEl.textContent = '🔴';
-			iconEl.classList.add('pulse');
-			labelEl.textContent = 'Recording Live';
-			labelEl.classList.add('text-red-700');
-			if (cancelEl) cancelEl.classList.remove('hidden');
-			if (progressContainer) progressContainer.classList.remove('hidden');
-		} else if (status === 'uploading') {
-			iconEl.textContent = '🔄';
-			iconEl.classList.add('spin');
-			labelEl.textContent = 'Uploading to Storage';
+		// --------------------------------------------------------------------------------------
+		// FIX: Correctly control the Cancel Button's display without fighting Tailwind
+		// --------------------------------------------------------------------------------------
+		let cancelEl = node.querySelector('.btn-cancel');
+		if (!cancelEl) {
+			const allBtns = node.querySelectorAll('button, a');
+			for (let i = 0; i < allBtns.length; i++) {
+				if ((allBtns[i].textContent || '').toLowerCase().includes('cancel')) {
+					cancelEl = allBtns[i]; break;
+				}
+			}
 		}
 
 		if (cancelEl) {
+            // Strip Tailwind display classes that cause weird responsive behavior
+            cancelEl.classList.remove('hidden', 'sm:inline-block', 'inline-block');
+            cancelEl.style.display = 'none'; // hidden by default
 			cancelEl.addEventListener('click', () => cancelRecordingFor(id));
+		}
+
+		const errorEl = node.querySelector('.status-error-text');
+		if (errorEl) errorEl.classList.add('hidden');
+
+		const progressContainer = node.querySelector('.status-progress-container');
+		if (progressContainer) progressContainer.classList.add('hidden');
+
+		if (nameEl) nameEl.textContent = rec.recordingName || rec.recording_name || '';
+		const status = ((rec.status||'')+"").toLowerCase();
+
+		// Set visuals based on status
+		if (status === 'pending') {
+			if (iconEl) iconEl.textContent = '⏳';
+			if (labelEl) labelEl.textContent = 'Pending';
+			if (cancelEl) cancelEl.style.display = 'inline-block'; // force show using inline CSS
+		} else if (status === 'recording') {
+			if (iconEl) { iconEl.textContent = '🔴'; iconEl.classList.add('pulse'); }
+			if (labelEl) { labelEl.textContent = 'Recording Live'; labelEl.classList.add('text-red-700'); }
+			if (cancelEl) cancelEl.style.display = 'inline-block'; // force show using inline CSS
+			if (progressContainer) progressContainer.classList.remove('hidden');
+		} else if (status === 'uploading') {
+			if (iconEl) { iconEl.textContent = '🔄'; iconEl.classList.add('spin'); }
+			if (labelEl) labelEl.textContent = 'Uploading to Storage';
+            // cancelEl stays hidden
 		}
 
 		container.appendChild(node);
@@ -634,7 +662,6 @@ async function cancelRecordingFor(id) {
 	if (!id) return;
 	if (!confirm('Are you sure you want to cancel this recording?')) return;
 	try {
-		// FIX: Uses POST /cancel/<id> as standard users are forbidden from using DELETE /recordings/<id>
 		const res = await apiCall(`/cancel/${id}`, 'POST');
 		if (!res.ok) {
 			const err = await res.json();
@@ -650,7 +677,6 @@ async function cancelRecording() {
 	if (!confirm("Are you sure you want to cancel this recording?")) return;
 
 	try {
-		// FIX: Uses POST /cancel/<id> as standard users are forbidden from using DELETE /recordings/<id>
 		const res = await apiCall(`/cancel/${currentJobId}`, "POST");
 		if (!res.ok) {
 			const err = await res.json();
@@ -699,7 +725,6 @@ async function loadRecordings() {
 			const isDeleted = ['deleted','removed','canceled','cancelled'].includes(status) || rec.deleted === true || rec.isDeleted === true;
 
 			let downloadHtml = "";
-			// FIX: Only show download button if the status is actually 'done' and URL exists
 			const canDownload = status === 'done' && (rec.download_url || rec.downloadUrl);
 			if (canDownload && !isDeleted) {
 				const id = rec.id || rec.jobId;
@@ -828,8 +853,6 @@ async function loadAdminRecordings() {
 		recordings.forEach(rec => {
 			const status = (rec.status || '').toString().toLowerCase();
 			
-			// FIX: Enforce clean visibility. Server rejects DELETES for "uploading". 
-			// We additionally hide for "cancelled" to prevent UI pollution as requested.
 			const hideDeleteBtn = ['deleted', 'removed', 'canceled', 'cancelled', 'uploading'].includes(status) || rec.deleted === true || rec.isDeleted === true;
 
 			const div = document.createElement('div');
