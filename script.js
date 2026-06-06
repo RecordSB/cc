@@ -494,9 +494,7 @@ function updateStatusCardData(data) {
 			if (iconEl) iconEl.innerHTML = "✅";
 			if (labelEl) { labelEl.textContent = "Done"; labelEl.className = "font-medium text-green-700"; }
 			const dl = data.downloadUrl || data.download_url;
-			if (dl && downloadBtn) { downloadBtn.href = dl; downloadBtn.classList.remove("hidden"); }
 			if (dl && downloadBtn) {
-				// attach handler to perform authenticated fetch+download
 				downloadBtn.href = '#';
 				downloadBtn.onclick = (ev) => { ev.preventDefault(); downloadRecording(data.id || data.jobId, data.recording_name || data.recordingName); };
 				downloadBtn.classList.remove("hidden");
@@ -553,40 +551,38 @@ function renderActiveStatusCards(recordings) {
 		const progressContainer = node.querySelector('.status-progress-container');
 		const progressBar = node.querySelector('.status-progress-bar');
 
+		// FIX: Always explicitly hide buttons/containers initially since they might not be hidden in the template
+		if (downloadEl) downloadEl.classList.add('hidden');
+		if (cancelEl) cancelEl.classList.add('hidden');
+		if (progressContainer) progressContainer.classList.add('hidden');
+		if (errorEl) errorEl.classList.add('hidden');
+
 		nameEl.textContent = rec.recordingName || rec.recording_name || '';
 		const status = ((rec.status||'')+"").toLowerCase();
 
 		// set visuals based on status
-		if (['pending'].includes(status)) {
+		if (status === 'pending') {
 			iconEl.textContent = '⏳';
 			labelEl.textContent = 'Pending';
-			cancelEl.classList.remove('hidden');
+			if (cancelEl) cancelEl.classList.remove('hidden');
 		} else if (status === 'recording') {
 			iconEl.textContent = '🔴';
 			iconEl.classList.add('pulse');
 			labelEl.textContent = 'Recording Live';
 			labelEl.classList.add('text-red-700');
-			cancelEl.classList.remove('hidden');
-			progressContainer.classList.remove('hidden');
+			if (cancelEl) cancelEl.classList.remove('hidden');
+			if (progressContainer) progressContainer.classList.remove('hidden');
 		} else if (status === 'uploading') {
 			iconEl.textContent = '🔄';
 			iconEl.classList.add('spin');
 			labelEl.textContent = 'Uploading to Storage';
-			progressContainer.classList.add('hidden');
 		}
 
-		const dl = rec.downloadUrl || rec.download_url;
-		if (dl) {
-			// attach click handler to perform authenticated fetch+download
-			downloadEl.href = '#';
-			downloadEl.onclick = (ev) => { ev.preventDefault(); downloadRecording(id, rec.recording_name || rec.recordingName); };
-			downloadEl.classList.remove('hidden');
+		if (cancelEl) {
+			cancelEl.addEventListener('click', () => cancelRecordingFor(id));
 		}
-
-		cancelEl.addEventListener('click', () => cancelRecordingFor(id));
 
 		container.appendChild(node);
-
 		activeRecordingsMap[id] = rec;
 	});
 
@@ -638,8 +634,12 @@ async function cancelRecordingFor(id) {
 	if (!id) return;
 	if (!confirm('Are you sure you want to cancel this recording?')) return;
 	try {
-		const res = await apiCall(`/recordings/${id}`, 'DELETE');
-		if (!res.ok) throw new Error('Failed to cancel recording');
+		// FIX: Uses POST /cancel/<id> as standard users are forbidden from using DELETE /recordings/<id>
+		const res = await apiCall(`/cancel/${id}`, 'POST');
+		if (!res.ok) {
+			const err = await res.json();
+			throw new Error(err.error || 'Failed to cancel recording');
+		}
 		// refresh
 		loadRecordings();
 	} catch (e) { alert('Error cancelling: ' + e.message); }
@@ -650,11 +650,16 @@ async function cancelRecording() {
 	if (!confirm("Are you sure you want to cancel this recording?")) return;
 
 	try {
-		const res = await apiCall(`/recordings/${currentJobId}`, "DELETE");
-		if (!res.ok) throw new Error("Failed to cancel recording");
+		// FIX: Uses POST /cancel/<id> as standard users are forbidden from using DELETE /recordings/<id>
+		const res = await apiCall(`/cancel/${currentJobId}`, "POST");
+		if (!res.ok) {
+			const err = await res.json();
+			throw new Error(err.error || 'Failed to cancel recording');
+		}
 
 		stopPolling();
 		const statusCard = document.getElementById("status-card"); if (statusCard) statusCard.classList.add("hidden");
+		loadRecordings();
 	} catch (e) {
 		alert("Error cancelling: " + e.message);
 	}
@@ -694,8 +699,9 @@ async function loadRecordings() {
 			const isDeleted = ['deleted','removed','canceled','cancelled'].includes(status) || rec.deleted === true || rec.isDeleted === true;
 
 			let downloadHtml = "";
-			const downloadUrl = rec.download_url || rec.downloadUrl;
-			if (!isDeleted && (rec.download_url || rec.downloadUrl)) {
+			// FIX: Only show download button if the status is actually 'done' and URL exists
+			const canDownload = status === 'done' && (rec.download_url || rec.downloadUrl);
+			if (canDownload && !isDeleted) {
 				const id = rec.id || rec.jobId;
 				downloadHtml = `<a href="#" onclick="downloadRecording('${id}', '${escapeHtml(rec.recording_name || rec.recordingName || '')}'); return false;" class="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded shadow-sm text-white bg-blue-600 hover:bg-blue-700">Download</a>`;
 			}
@@ -821,11 +827,14 @@ async function loadAdminRecordings() {
 
 		recordings.forEach(rec => {
 			const status = (rec.status || '').toString().toLowerCase();
-			const isDeleted = ['deleted','removed','canceled','cancelled'].includes(status) || rec.deleted === true || rec.isDeleted === true;
+			
+			// FIX: Enforce clean visibility. Server rejects DELETES for "uploading". 
+			// We additionally hide for "cancelled" to prevent UI pollution as requested.
+			const hideDeleteBtn = ['deleted', 'removed', 'canceled', 'cancelled', 'uploading'].includes(status) || rec.deleted === true || rec.isDeleted === true;
 
 			const div = document.createElement('div');
 			div.className = 'py-3 flex justify-between items-center';
-			const deleteBtnHtml = isDeleted ? '' : `<button class="ml-4 inline-flex items-center px-2.5 py-1.5 border border-red-300 shadow-sm text-xs font-medium rounded text-red-700 bg-white hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500" onclick="window.deleteRecording('${rec.id || rec.jobId}')">Delete</button>`;
+			const deleteBtnHtml = hideDeleteBtn ? '' : `<button class="ml-4 inline-flex items-center px-2.5 py-1.5 border border-red-300 shadow-sm text-xs font-medium rounded text-red-700 bg-white hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500" onclick="window.deleteRecording('${rec.id || rec.jobId}')">Delete</button>`;
 
 			div.innerHTML = `
 				<div class="flex-1 min-w-0 pr-4">
