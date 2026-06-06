@@ -496,8 +496,9 @@ function updateStatusCardData(data) {
 			const dl = data.downloadUrl || data.download_url;
 			if (dl && downloadBtn) { downloadBtn.href = dl; downloadBtn.classList.remove("hidden"); }
 			if (dl && downloadBtn) {
-				// route through backend to track downloads
-				downloadBtn.href = `${WORKER_URL}/download/${data.id || data.jobId}`;
+				// attach handler to perform authenticated fetch+download
+				downloadBtn.href = '#';
+				downloadBtn.onclick = (ev) => { ev.preventDefault(); downloadRecording(data.id || data.jobId, data.recording_name || data.recordingName); };
 				downloadBtn.classList.remove("hidden");
 			}
 			break;
@@ -576,8 +577,9 @@ function renderActiveStatusCards(recordings) {
 
 		const dl = rec.downloadUrl || rec.download_url;
 		if (dl) {
-			// Route downloads through the backend to track counts
-			downloadEl.href = `${WORKER_URL}/download/${id}`;
+			// attach click handler to perform authenticated fetch+download
+			downloadEl.href = '#';
+			downloadEl.onclick = (ev) => { ev.preventDefault(); downloadRecording(id, rec.recording_name || rec.recordingName); };
 			downloadEl.classList.remove('hidden');
 		}
 
@@ -694,8 +696,8 @@ async function loadRecordings() {
 			let downloadHtml = "";
 			const downloadUrl = rec.download_url || rec.downloadUrl;
 			if (!isDeleted && (rec.download_url || rec.downloadUrl)) {
-				const href = `${WORKER_URL}/download/${rec.id || rec.jobId}`;
-				downloadHtml = `<a href="${href}" target="_blank" class="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded shadow-sm text-white bg-blue-600 hover:bg-blue-700">Download</a>`;
+				const id = rec.id || rec.jobId;
+				downloadHtml = `<a href="#" onclick="downloadRecording('${id}', '${escapeHtml(rec.recording_name || rec.recordingName || '')}'); return false;" class="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded shadow-sm text-white bg-blue-600 hover:bg-blue-700">Download</a>`;
 			}
 
 			const createdAt = rec.created_at || rec.startTime || rec.start_time;
@@ -889,3 +891,25 @@ function escapeHtml(unsafe) {
 	return unsafe.toString().replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
 }
 
+window.downloadRecording = async function(id, suggestedName) {
+    if (!id) return alert('Missing recording id');
+    try {
+        const res = await apiCall(`/download/${id}`);
+        if (!res.ok) {
+            let msg = 'Download failed';
+            try { const j = await res.json(); if (j && j.error) msg = j.error; } catch(e) {}
+            alert('Download failed: ' + msg);
+            return;
+        }
+        const data = await res.json();
+        if (!data.url) { alert('Failed to get download URL'); return; }
+
+        // Navigate to the presigned URL — R2 returns Content-Disposition: attachment
+        // so the browser downloads the file without leaving the page, on all devices
+        window.location.href = data.url;
+
+    } catch (e) {
+        console.error('Download error', e);
+        alert('Download failed: ' + (e.message || e));
+    }
+};
