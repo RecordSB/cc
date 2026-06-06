@@ -129,14 +129,14 @@ document.addEventListener("DOMContentLoaded", () => {
 	if (recordingNameInput) {
 		recordingNameInput.addEventListener('keydown', (e) => {
 			if (e.key === ' ') {
-				// prevent space; insert '-' unless at start
+				// prevent space; insert '_' unless at start
 				e.preventDefault();
 				const el = e.target;
 				const pos = el.selectionStart || 0;
 				if (pos === 0) return; // don't insert at start
 				const val = el.value || '';
-				// insert '-' at cursor
-				const newVal = val.slice(0,pos) + '-' + val.slice(pos);
+				// insert '_' at cursor
+				const newVal = val.slice(0,pos) + '_' + val.slice(pos);
 				el.value = newVal;
 				el.setSelectionRange(pos+1, pos+1);
 			}
@@ -144,10 +144,10 @@ document.addEventListener("DOMContentLoaded", () => {
 
 		recordingNameInput.addEventListener('input', (e) => {
 			let v = e.target.value || '';
-			// remove leading/trailing spaces and dashes
-			v = v.replace(/^[-\s]+|[-\s]+$/g, '');
-			// collapse multiple spaces/dashes into single dash
-			v = v.replace(/[\s-]+/g, '-');
+				// remove leading/trailing spaces and underscores
+				v = v.replace(/^[_\s]+|[_\s]+$/g, '');
+				// collapse multiple spaces/underscores into single underscore
+				v = v.replace(/[\s_]+/g, '_');
 			e.target.value = v;
 		});
 	}
