@@ -921,7 +921,7 @@ async function loadRecordings() {
 
 		pastRecordings.forEach(rec => {
 			const div = document.createElement("div");
-			div.className = "py-4 flex justify-between items-center";
+			div.className = "py-4 flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-center";
 
 			const status = (rec.status || '').toString().toLowerCase();
 			const isDeleted = ['deleted','removed','canceled','cancelled'].includes(status) || rec.deleted === true || rec.isDeleted === true;
@@ -970,7 +970,7 @@ async function loadRecordings() {
 						${escapeHtml(rec.recording_name || rec.recordingName || '')}
 						${rec.job_type === 'clip' ? '<span class="ml-1.5 badge badge-clip">Buffer Clip</span>' : ''}
 					</h4>
-					<div class="mt-1 flex items-center space-x-2 text-xs text-gray-500">
+					<div class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-gray-500">
 						<span>${createdAt ? new Date(createdAt).toLocaleString(undefined, {month:'short', day:'numeric', hour:'numeric', minute:'2-digit'}) : ''}</span>
 						<span>&bull;</span>
 						<span>${rec.duration_minutes || rec.durationMinutes || '-'} min</span>
@@ -980,7 +980,7 @@ async function loadRecordings() {
 					</div>
 					<p class="text-xs text-gray-500 mt-1">Downloads: ${escapeHtml(String(rec.download_count || rec.downloadCount || 0))}</p>
 				</div>
-				<div class="flex-shrink-0 flex items-center gap-2">
+				<div class="recording-actions w-full sm:w-auto flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:flex-shrink-0">
 					${actionButtonsHtml}
 				</div>
 			`;
@@ -1065,9 +1065,9 @@ async function loadAdminRecordings() {
 			const canWatch = status === 'done' && !hideDeleteBtn;
 
 			const div = document.createElement('div');
-			div.className = 'py-3 flex justify-between items-center';
-			const watchBtnHtml = canWatch ? `<a href="#" onclick="watchRecording('${rec.id || rec.jobId}'); return false;" class="ml-2 inline-flex items-center px-2.5 py-1.5 border border-blue-300 shadow-sm text-xs font-medium rounded text-blue-700 bg-white hover:bg-blue-50">Watch</a>` : '';
-			const deleteBtnHtml = hideDeleteBtn ? '' : `<button class="ml-2 inline-flex items-center px-2.5 py-1.5 border border-red-300 shadow-sm text-xs font-medium rounded text-red-700 bg-white hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500" onclick="window.deleteRecording('${rec.id || rec.jobId}')">Delete</button>`;
+			div.className = 'py-3 flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-center';
+			const watchBtnHtml = canWatch ? `<a href="#" onclick="watchRecording('${rec.id || rec.jobId}'); return false;" class="inline-flex items-center justify-center px-2.5 py-1.5 border border-blue-300 shadow-sm text-xs font-medium rounded text-blue-700 bg-white hover:bg-blue-50">Watch</a>` : '';
+			const deleteBtnHtml = hideDeleteBtn ? '' : `<button class="inline-flex items-center justify-center px-2.5 py-1.5 border border-red-300 shadow-sm text-xs font-medium rounded text-red-700 bg-white hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500" onclick="window.deleteRecording('${rec.id || rec.jobId}')">Delete</button>`;
 
 			div.innerHTML = `
 				<div class="flex-1 min-w-0 pr-4">
@@ -1078,7 +1078,7 @@ async function loadAdminRecordings() {
 					<p class="text-xs text-gray-500 mt-1">ID: ${rec.id || rec.jobId} &bull; ${escapeHtml(rec.status || '')}</p>
 					<p class="text-xs text-gray-500 mt-1">Downloads: ${escapeHtml(String(rec.download_count || rec.downloadCount || 0))}</p>
 				</div>
-				<div class="flex items-center flex-shrink-0">
+				<div class="recording-actions w-full sm:w-auto flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:flex-shrink-0">
 					${watchBtnHtml}${deleteBtnHtml}
 				</div>
 			`;
