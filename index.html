@@ -78,6 +78,73 @@
                     </div>
                 </form>
             </section>
+            
+            <!-- Recover Past Broadcast (collapsible) -->
+            <section class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+                <button type="button" id="btn-toggle-buffer" onclick="toggleBufferSection()"
+                    class="w-full flex justify-between items-center p-6 text-left hover:bg-gray-50 transition-colors">
+                    <div>
+                        <h2 class="text-lg font-semibold text-gray-900">Recover Past Broadcast</h2>
+                        <p class="text-sm text-gray-500 mt-0.5">Extract a clip from the rolling 12-hour buffer</p>
+                    </div>
+                    <svg id="buffer-chevron" class="w-5 h-5 text-gray-400 transition-transform duration-200"
+                        fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                    </svg>
+                </button>
+                <div id="buffer-section" class="hidden">
+                    <div class="border-t border-gray-200 p-6 space-y-4">
+
+                        <!-- Buffer status indicator -->
+                        <div class="flex items-center space-x-2">
+                            <span id="buffer-status-dot" class="inline-block w-2.5 h-2.5 rounded-full bg-gray-300 flex-shrink-0"></span>
+                            <span id="buffer-status-text" class="text-sm text-gray-500">Checking buffer...</span>
+                        </div>
+
+                        <!-- Gap warning -->
+                        <div id="buffer-gap-warning" class="hidden text-sm text-yellow-700 bg-yellow-50 border border-yellow-200 p-3 rounded-md">
+                            ⚠️ Requested time range overlaps a known buffer gap — footage may be incomplete.
+                        </div>
+
+                        <!-- Clip form -->
+                        <div class="space-y-4">
+                            <div>
+                                <label for="clip-recording-name" class="block text-sm font-medium text-gray-700">
+                                    Recording Name <span class="text-xs text-gray-400 font-normal">(Filename)</span>
+                                </label>
+                                <input type="text" id="clip-recording-name"
+                                    class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                                    placeholder="e.g. Sunday Mass June 8">
+                            </div>
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                    <label for="clip-start" class="block text-sm font-medium text-gray-700">Start — minutes ago</label>
+                                    <input type="number" id="clip-start" min="1"
+                                        class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                                        placeholder="e.g. 90">
+                                    <p id="clip-start-helper" class="mt-1 text-xs text-blue-600 min-h-[1rem]"></p>
+                                </div>
+                                <div>
+                                    <label for="clip-duration" class="block text-sm font-medium text-gray-700">
+                                        Duration — minutes <span class="text-xs text-gray-400 font-normal">(1–180)</span>
+                                    </label>
+                                    <input type="number" id="clip-duration" min="1" max="180"
+                                        class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                                        placeholder="e.g. 60">
+                                </div>
+                            </div>
+                            <div id="buffer-clip-error" class="hidden text-sm text-red-600 bg-red-50 p-3 rounded-md"></div>
+                            <div class="flex justify-end pt-2">
+                                <button type="button" id="clip-submit" onclick="handleClipSubmit()"
+                                    class="w-full sm:w-auto inline-flex justify-center py-2 px-6 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed">
+                                    Extract Clip
+                                </button>
+                            </div>
+                        </div>
+
+                    </div>
+                </div>
+            </section>
 
             <!-- Active Status Cards (multiple) -->
             <div id="status-cards" class="space-y-4 hidden"></div>
