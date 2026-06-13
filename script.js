@@ -13,6 +13,9 @@ let countdownInterval = null;
 let activeJobData = null;
 let activeRecordingsMap = {}; // id -> recording data for active cards
 let activeCountdownInterval = null;
+let bufferStatusData = null;
+let clipPollingInterval = null;
+let bufferSectionOpen = false;
 
 // ==========================================
 // Login attempt / lockout helpers (localStorage)
@@ -158,6 +161,18 @@ document.addEventListener("DOMContentLoaded", () => {
 	if (logFilter) logFilter.addEventListener('change', loadLogs);
 
 	updateDurationHelper();
+
+	const clipStartInput = document.getElementById('clip-start');
+	if (clipStartInput) {
+		clipStartInput.addEventListener('input', () => {
+			updateClipTimeHelper();
+			checkGapWarning();
+		});
+	}
+	const clipDurationInput = document.getElementById('clip-duration');
+	if (clipDurationInput) {
+		clipDurationInput.addEventListener('input', checkGapWarning);
+	}
 });
 
 // ==========================================
@@ -344,6 +359,189 @@ function switchTab(tabId) {
 }
 
 // ==========================================
+// Buffer / Clip Recovery
+// ==========================================
+
+function toggleBufferSection() {
+	const section = document.getElementById('buffer-section');
+	const chevron = document.getElementById('buffer-chevron');
+	if (!section) return;
+	bufferSectionOpen = !bufferSectionOpen;
+	section.classList.toggle('hidden', !bufferSectionOpen);
+	if (chevron) chevron.style.transform = bufferSectionOpen ? 'rotate(180deg)' : '';
+	if (bufferSectionOpen) loadBufferStatus();
+}
+
+async function loadBufferStatus() {
+	const dotEl = document.getElementById('buffer-status-dot');
+	const textEl = document.getElementById('buffer-status-text');
+	const submitBtn = document.getElementById('clip-submit');
+	const formInputIds = ['clip-recording-name', 'clip-start', 'clip-duration'];
+
+	try {
+		const res = await apiCall('/buffer/status');
+		if (!res.ok) throw new Error('Failed to fetch buffer status');
+		const data = await res.json();
+		bufferStatusData = data;
+
+		const running = data.running === true;
+		const hoursAvail = data.hours_available || 0;
+
+		if (dotEl) {
+			dotEl.className = `inline-block w-2.5 h-2.5 rounded-full flex-shrink-0 ${running ? 'bg-green-500' : 'bg-red-500'}`;
+		}
+		if (textEl) {
+			if (running) {
+				const h = Math.floor(hoursAvail);
+				const m = Math.round((hoursAvail - h) * 60);
+				const parts = [];
+				if (h > 0) parts.push(`${h}h`);
+				if (m > 0 || h === 0) parts.push(`${m}m`);
+				textEl.textContent = `Buffer active — last ${parts.join(' ')} available`;
+				textEl.className = 'text-sm text-green-700 font-medium';
+			} else {
+				textEl.textContent = 'Buffer offline — clips unavailable';
+				textEl.className = 'text-sm text-red-600 font-medium';
+			}
+		}
+
+		if (submitBtn) submitBtn.disabled = !running;
+		formInputIds.forEach(id => {
+			const el = document.getElementById(id);
+			if (el) el.disabled = !running;
+		});
+
+	} catch (e) {
+		if (dotEl) dotEl.className = 'inline-block w-2.5 h-2.5 rounded-full flex-shrink-0 bg-gray-400';
+		if (textEl) { textEl.textContent = 'Could not reach buffer status'; textEl.className = 'text-sm text-gray-500'; }
+	}
+}
+
+function updateClipTimeHelper() {
+	const startEl = document.getElementById('clip-start');
+	const helperEl = document.getElementById('clip-start-helper');
+	if (!startEl || !helperEl) return;
+	const mins = parseInt(startEl.value, 10);
+	if (isNaN(mins) || mins <= 0) { helperEl.textContent = ''; return; }
+
+	const wallTime = new Date(Date.now() - mins * 60000);
+	const now = new Date();
+	const yesterday = new Date(now); yesterday.setDate(yesterday.getDate() - 1);
+	const isToday = wallTime.toDateString() === now.toDateString();
+	const isYesterday = wallTime.toDateString() === yesterday.toDateString();
+
+	const timeStr = wallTime.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+	let label;
+	if (isToday) label = `${timeStr} today`;
+	else if (isYesterday) label = `${timeStr} yesterday`;
+	else label = wallTime.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+
+	helperEl.textContent = `= ${label}`;
+}
+
+function checkGapWarning() {
+	const warningEl = document.getElementById('buffer-gap-warning');
+	if (!warningEl || !bufferStatusData) return;
+
+	const startMins = parseInt((document.getElementById('clip-start') || {}).value, 10);
+	const durMins = parseInt((document.getElementById('clip-duration') || {}).value, 10);
+	if (isNaN(startMins) || isNaN(durMins) || startMins <= 0 || durMins <= 0) {
+		warningEl.classList.add('hidden');
+		return;
+	}
+
+	const clipStart = new Date(Date.now() - startMins * 60000);
+	const clipEnd = new Date(clipStart.getTime() + durMins * 60000);
+	const gaps = bufferStatusData.gaps || [];
+
+	const overlaps = gaps.some(gap => {
+		try {
+			return new Date(gap.start) < clipEnd && new Date(gap.end) > clipStart;
+		} catch (e) { return false; }
+	});
+
+	warningEl.classList.toggle('hidden', !overlaps);
+}
+
+async function handleClipSubmit() {
+	const errorEl = document.getElementById('buffer-clip-error');
+	if (errorEl) errorEl.classList.add('hidden');
+
+	const recordingName = ((document.getElementById('clip-recording-name') || {}).value || '').trim();
+	const startMins = parseInt((document.getElementById('clip-start') || {}).value, 10);
+	const durMins = parseInt((document.getElementById('clip-duration') || {}).value, 10);
+
+	if (!recordingName) return showClipError('Recording name cannot be empty.');
+	if (isNaN(startMins) || startMins <= 0) return showClipError('Start time must be a positive number of minutes.');
+	if (isNaN(durMins) || durMins < 1 || durMins > 180) return showClipError('Duration must be between 1 and 180 minutes.');
+
+	const hoursAvail = bufferStatusData ? (bufferStatusData.hours_available || 0) : 0;
+	const minsAvail = Math.floor(hoursAvail * 60);
+	if (startMins > minsAvail) return showClipError(`Start time exceeds available buffer (${minsAvail} minutes available).`);
+	if (startMins - durMins < 0) return showClipError('Clip would extend into the future — reduce duration or start further back.');
+
+	const submitBtn = document.getElementById('clip-submit');
+	if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = 'Submitting...'; }
+
+	try {
+		const res = await apiCall('/buffer/clip', 'POST', {
+			recording_name: recordingName,
+			start_minutes_ago: startMins,
+			duration_minutes: durMins
+		});
+		const data = await res.json();
+
+		if (!res.ok) {
+			showClipError(data.error || 'Failed to submit clip request.');
+			return;
+		}
+
+		// Clear form
+		['clip-recording-name', 'clip-start', 'clip-duration'].forEach(id => {
+			const el = document.getElementById(id); if (el) el.value = '';
+		});
+		const helperEl = document.getElementById('clip-start-helper'); if (helperEl) helperEl.textContent = '';
+		const gapEl = document.getElementById('buffer-gap-warning'); if (gapEl) gapEl.classList.add('hidden');
+
+		loadRecordings();
+		pollClipUntilDone(data.job_id);
+
+	} catch (e) {
+		showClipError(e.message || 'Request failed.');
+	} finally {
+		if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = 'Extract Clip'; }
+	}
+}
+
+function showClipError(msg) {
+	const el = document.getElementById('buffer-clip-error');
+	if (!el) return;
+	el.textContent = msg;
+	el.classList.remove('hidden');
+}
+
+async function pollClipUntilDone(jobId) {
+	if (clipPollingInterval) clearInterval(clipPollingInterval);
+	let attempts = 0;
+	clipPollingInterval = setInterval(async () => {
+		attempts++;
+		try {
+			const res = await apiCall(`/status/${jobId}`);
+			if (!res.ok) return;
+			const data = await res.json();
+			const status = (data.status || '').toLowerCase();
+			loadRecordings();
+			if (['done', 'error', 'cancelled'].includes(status) || attempts >= 60) {
+				clearInterval(clipPollingInterval);
+				clipPollingInterval = null;
+			}
+		} catch (e) {
+			console.error('Clip polling error:', e);
+		}
+	}, 5000);
+}
+
+// ==========================================
 // Scheduling Recordings
 // ==========================================
 function updateDurationHelper() {
@@ -525,7 +723,7 @@ function renderActiveStatusCards(recordings) {
 	const container = document.getElementById('status-cards');
 	const template = document.getElementById('status-card-template');
 	if (!container || !template) return;
-	const activeStatuses = ['pending','recording','uploading'];
+	const activeStatuses = ['pending','recording','uploading','clipping'];
 	const activeRecs = recordings.filter(r => activeStatuses.includes(((r.status||'')+"").toLowerCase()));
 
 	container.innerHTML = '';
@@ -607,7 +805,11 @@ function renderActiveStatusCards(recordings) {
 		} else if (status === 'uploading') {
 			if (iconEl) { iconEl.textContent = '🔄'; iconEl.classList.add('spin'); }
 			if (labelEl) labelEl.textContent = 'Uploading to Storage';
-            // cancelEl stays hidden
+			// cancelEl stays hidden
+		} else if (status === 'clipping') {
+			if (iconEl) iconEl.textContent = '✂️';
+			if (labelEl) { labelEl.textContent = 'Extracting Clip'; labelEl.classList.add('text-purple-700'); }
+			// no cancel, no progress — clips finish in seconds
 		}
 
 		container.appendChild(node);
@@ -709,7 +911,7 @@ async function loadRecordings() {
 		if (!listEl) return;
 		listEl.innerHTML = "";
 
-		const activeStatuses = ['pending','recording','uploading'];
+		const activeStatuses = ['pending','recording','uploading','clipping'];
 		const pastRecordings = recordings.filter(r => !activeStatuses.includes(((r.status||'')+"").toLowerCase()));
 
 		if (!pastRecordings || pastRecordings.length === 0) {
@@ -764,7 +966,10 @@ async function loadRecordings() {
 
 			div.innerHTML = `
 				<div class="flex-1 min-w-0 pr-4">
-					<h4 class="text-sm font-medium text-gray-900 truncate">${escapeHtml(rec.recording_name || rec.recordingName || '')}</h4>
+					<h4 class="text-sm font-medium text-gray-900 truncate">
+						${escapeHtml(rec.recording_name || rec.recordingName || '')}
+						${rec.job_type === 'clip' ? '<span class="ml-1.5 badge badge-clip">Buffer Clip</span>' : ''}
+					</h4>
 					<div class="mt-1 flex items-center space-x-2 text-xs text-gray-500">
 						<span>${createdAt ? new Date(createdAt).toLocaleString(undefined, {month:'short', day:'numeric', hour:'numeric', minute:'2-digit'}) : ''}</span>
 						<span>&bull;</span>
@@ -856,7 +1061,7 @@ async function loadAdminRecordings() {
 		recordings.forEach(rec => {
 			const status = (rec.status || '').toString().toLowerCase();
 			
-			const hideDeleteBtn = ['deleted', 'removed', 'canceled', 'cancelled', 'uploading'].includes(status) || rec.deleted === true || rec.isDeleted === true;
+			const hideDeleteBtn = ['deleted', 'removed', 'canceled', 'cancelled', 'uploading', 'clipping'].includes(status) || rec.deleted === true || rec.isDeleted === true;
 			const canWatch = status === 'done' && !hideDeleteBtn;
 
 			const div = document.createElement('div');
@@ -866,7 +1071,10 @@ async function loadAdminRecordings() {
 
 			div.innerHTML = `
 				<div class="flex-1 min-w-0 pr-4">
-					<p class="text-sm font-medium text-gray-900 truncate">${escapeHtml(rec.recordingName || rec.recording_name || '')}</p>
+					<p class="text-sm font-medium text-gray-900 truncate">
+						${escapeHtml(rec.recordingName || rec.recording_name || '')}
+						${rec.job_type === 'clip' ? '<span class="ml-1.5 badge badge-clip">Buffer Clip</span>' : ''}
+					</p>
 					<p class="text-xs text-gray-500 mt-1">ID: ${rec.id || rec.jobId} &bull; ${escapeHtml(rec.status || '')}</p>
 					<p class="text-xs text-gray-500 mt-1">Downloads: ${escapeHtml(String(rec.download_count || rec.downloadCount || 0))}</p>
 				</div>
