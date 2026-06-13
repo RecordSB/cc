@@ -38,20 +38,49 @@
 .badge-recording { background-color: #fee2e2; color: #991b1b; animation: pulse-red 2s infinite; }
 .badge-clip, .badge-clipping { background-color: #ede9fe; color: #5b21b6; }
 
+/* Responsive recording action buttons */
+.recording-actions > a,
+.recording-actions > button {
+	justify-content: center;
+	text-align: center;
+	white-space: nowrap;
+}
+
 /* Hide scrollbars for cleaner look on tables */
 .no-scrollbar::-webkit-scrollbar { display: none; }
 .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 
 /* Mobile-specific tweaks */
 @media (max-width: 640px) {
+	html, body {
+		overflow-x: hidden;
+	}
+
 	/* Slightly smaller paddings for tight screens */
 	.p-6 { padding: 1rem; }
+
+	#main-app {
+		padding-top: 1rem;
+		padding-bottom: 1.5rem;
+	}
+
+	#btn-toggle-buffer {
+		align-items: flex-start;
+		gap: 0.75rem;
+	}
 
 	/* Make status card action buttons full-width and stacked on mobile */
 	.status-card-actions .btn-cancel,
 	.status-card-actions .btn-download {
 		display: block !important;
 		width: 100% !important;
+	}
+
+	.recording-actions > a,
+	.recording-actions > button {
+		width: 100%;
+		min-height: 2.5rem;
+		white-space: normal;
 	}
 
 	/* Slightly larger touch targets for form inputs */
