@@ -99,6 +99,28 @@ document.addEventListener("DOMContentLoaded", () => {
 		showLockoutScreen(lockoutRemainingMs());
 		return;
 	}
+	// Attempt silent auto-login from sessionStorage before showing login screen
+	const savedPassword = sessionStorage.getItem('recordsb_password');
+	if (savedPassword) {
+		(async () => {
+			try {
+				currentPassword = savedPassword;
+				const recRes = await apiCall("/recordings");
+				if (!recRes.ok) throw new Error("Saved password rejected");
+				const logRes = await apiCall("/logs?limit=1");
+				if (logRes.status === 200) currentRole = "admin";
+				else if (logRes.status === 403) currentRole = "user";
+				else throw new Error("Unexpected role response");
+				showMainApp();
+				return;
+			} catch (e) {
+				// Saved password is stale or server unreachable — fall through to login screen
+				currentPassword = null;
+				sessionStorage.removeItem('recordsb_password');
+			}
+		})();
+	}
+
 	const loginForm = document.getElementById("login-form");
 	if (loginForm) loginForm.addEventListener("submit", handleLogin);
 
@@ -276,6 +298,9 @@ async function handleLogin(e) {
 
 		// successful authentication — reset local failed-attempts state
 		clearFailedAttempts();
+
+		// Persist password for the session so editor.html and live.html don't require re-login
+		sessionStorage.setItem('recordsb_password', pwdInput);
 
 		showMainApp();
 
@@ -723,7 +748,7 @@ function renderActiveStatusCards(recordings) {
 	const container = document.getElementById('status-cards');
 	const template = document.getElementById('status-card-template');
 	if (!container || !template) return;
-	const activeStatuses = ['pending','recording','uploading','clipping'];
+	const activeStatuses = ['pending','recording','uploading','clipping','rendering'];
 	const activeRecs = recordings.filter(r => activeStatuses.includes(((r.status||'')+"").toLowerCase()));
 
 	container.innerHTML = '';
@@ -809,7 +834,9 @@ function renderActiveStatusCards(recordings) {
 		} else if (status === 'clipping') {
 			if (iconEl) iconEl.textContent = '✂️';
 			if (labelEl) { labelEl.textContent = 'Extracting Clip'; labelEl.classList.add('text-purple-700'); }
-			// no cancel, no progress — clips finish in seconds
+		} else if (status === 'rendering') {
+			if (iconEl) iconEl.textContent = '🎬';
+			if (labelEl) { labelEl.textContent = 'Rendering'; labelEl.classList.add('text-yellow-700'); }
 		}
 
 		container.appendChild(node);
@@ -911,7 +938,7 @@ async function loadRecordings() {
 		if (!listEl) return;
 		listEl.innerHTML = "";
 
-		const activeStatuses = ['pending','recording','uploading','clipping'];
+		const activeStatuses = ['pending','recording','uploading','clipping','rendering'];
 		const pastRecordings = recordings.filter(r => !activeStatuses.includes(((r.status||'')+"").toLowerCase()));
 
 		if (!pastRecordings || pastRecordings.length === 0) {
@@ -1061,7 +1088,7 @@ async function loadAdminRecordings() {
 		recordings.forEach(rec => {
 			const status = (rec.status || '').toString().toLowerCase();
 			
-			const hideDeleteBtn = ['deleted', 'removed', 'canceled', 'cancelled', 'uploading', 'clipping'].includes(status) || rec.deleted === true || rec.isDeleted === true;
+			const hideDeleteBtn = ['deleted', 'removed', 'canceled', 'cancelled', 'uploading', 'clipping', 'rendering'].includes(status) || rec.deleted === true || rec.isDeleted === true;
 			const canWatch = status === 'done' && !hideDeleteBtn;
 
 			const div = document.createElement('div');
