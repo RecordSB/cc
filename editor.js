@@ -11,7 +11,6 @@ let outPoint = 0;
 let isDragging = null; // 'in' | 'out' | 'seek' | null
 let renderJobId = null;
 let renderPollInterval = null;
-let portraitDismissed = false;
 
 // ==========================================
 // Auth
@@ -83,23 +82,6 @@ function escapeHtml(str) {
 }
 
 // ==========================================
-// Portrait Mode
-// ==========================================
-function checkPortrait() {
-    if (portraitDismissed) return;
-    const editorView = document.getElementById('view-editor');
-    if (!editorView || editorView.classList.contains('hidden')) return;
-    const isMobile = window.innerWidth < 640;
-    const isPortrait = window.innerHeight > window.innerWidth;
-    document.getElementById('portrait-overlay').classList.toggle('hidden', !(isMobile && isPortrait));
-}
-
-function dismissPortraitWarning() {
-    portraitDismissed = true;
-    document.getElementById('portrait-overlay').classList.add('hidden');
-}
-
-// ==========================================
 // File Selection
 // ==========================================
 async function loadRecordingsList() {
@@ -161,7 +143,6 @@ async function openInEditor(jobId) {
     videoDuration = 0;
     inPoint = 0;
     outPoint = 0;
-    portraitDismissed = false;
 
     // Switch views
     document.getElementById('view-select').classList.add('hidden');
@@ -181,7 +162,6 @@ async function openInEditor(jobId) {
     document.getElementById('editor-filename').classList.add('hidden');
 
     window.scrollTo({ top: 0, behavior: 'smooth' });
-    checkPortrait();
 
     try {
         // Fetch watch URL and recording name in parallel
@@ -220,7 +200,6 @@ function backToSelection() {
 
     document.getElementById('view-editor').classList.add('hidden');
     document.getElementById('view-select').classList.remove('hidden');
-    document.getElementById('portrait-overlay').classList.add('hidden');
     document.getElementById('editor-filename').classList.add('hidden');
     document.getElementById('render-btn').disabled = true;
 }
@@ -280,6 +259,12 @@ function togglePlay() {
     const video = document.getElementById('editor-video');
     if (!video || !videoDuration) return;
     video.paused ? video.play() : video.pause();
+}
+
+function skipTime(delta) {
+    const video = document.getElementById('editor-video');
+    if (!video || !videoDuration) return;
+    video.currentTime = Math.max(0, Math.min(videoDuration, video.currentTime + delta));
 }
 
 function setInPoint() {
@@ -558,10 +543,10 @@ function initKeyboardShortcuts() {
 
         if (e.key === 'ArrowLeft') {
             e.preventDefault();
-            video.currentTime = Math.max(0, video.currentTime - 10);
+            skipTime(-10);
         } else if (e.key === 'ArrowRight') {
             e.preventDefault();
-            video.currentTime = Math.min(videoDuration, video.currentTime + 10);
+            skipTime(10);
         } else if (e.key === ' ') {
             e.preventDefault();
             togglePlay();
@@ -580,7 +565,4 @@ document.addEventListener('DOMContentLoaded', () => {
     initTimeInputs();
     initKeyboardShortcuts();
     loadRecordingsList();
-
-    window.addEventListener('resize', checkPortrait);
-    window.addEventListener('orientationchange', () => setTimeout(checkPortrait, 150));
 });
