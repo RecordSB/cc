@@ -25,22 +25,6 @@
 </head>
 <body class="bg-gray-50 text-gray-900 font-sans min-h-screen">
 
-    <!-- ===================== PORTRAIT OVERLAY ===================== -->
-    <div id="portrait-overlay"
-        class="hidden fixed inset-0 z-50 bg-gray-900 bg-opacity-95 flex items-center justify-center text-center p-8">
-        <div class="text-white">
-            <div class="text-5xl mb-5">📱</div>
-            <h2 class="text-xl font-bold mb-3">Rotate to Landscape</h2>
-            <p class="text-gray-400 text-sm mb-6">
-                The editor works best in landscape mode so the full timeline is visible.
-            </p>
-            <button onclick="dismissPortraitWarning()"
-                class="px-5 py-2 bg-white text-gray-900 rounded-md text-sm font-medium hover:bg-gray-100 transition-colors">
-                Continue Anyway
-            </button>
-        </div>
-    </div>
-
     <!-- ===================== RENDER MODAL ===================== -->
     <div id="render-modal"
         class="hidden fixed inset-0 z-40 bg-black bg-opacity-50 flex items-center justify-center p-4">
@@ -182,6 +166,16 @@
                 <span id="time-current" class="text-sm font-mono text-gray-700 flex-shrink-0">0:00</span>
                 <span class="text-gray-300 flex-shrink-0">/</span>
                 <span id="time-total" class="text-sm font-mono text-gray-400 flex-shrink-0">0:00</span>
+                
+                <!-- Mobile skip controls -->
+                <div class="flex items-center gap-1.5 ml-auto sm:hidden text-gray-500">
+                    <button onclick="skipTime(-10)" class="p-2 hover:bg-gray-100 rounded-full transition-colors" title="Skip Back 10s">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+                    </button>
+                    <button onclick="skipTime(10)" class="p-2 hover:bg-gray-100 rounded-full transition-colors" title="Skip Forward 10s">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></svg>
+                    </button>
+                </div>
             </div>
 
             <!-- Timeline track -->
@@ -195,7 +189,7 @@
                     </div>
                     <!-- Playhead -->
                     <div id="timeline-playhead"
-                        class="absolute inset-y-0 w-0.5 bg-blue-500 pointer-events-none z-20 rounded-full"
+                        class="absolute inset-y-0 w-0.5 bg-blue-500 pointer-events-none z-20 rounded-full transition-all duration-150 ease-linear"
                         style="left: 0%;">
                     </div>
                     <!-- IN handle (green) -->
