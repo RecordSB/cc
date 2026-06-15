@@ -224,6 +224,11 @@ function initVideoEvents() {
 
         syncInputsFromPoints();
         redrawTimeline();
+
+        // Push forward 0.1 seconds to avoid displaying a black frame initially
+        if (videoDuration > 0.1) {
+            video.currentTime = 0.1;
+        }
     });
 
     video.addEventListener('timeupdate', () => {
