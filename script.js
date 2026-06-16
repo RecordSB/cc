@@ -644,6 +644,15 @@ function showScheduleError(msg) {
 // ==========================================
 // Status & Polling Logic
 // ==========================================
+const SVGS = {
+    pending: `<svg class="h-8 w-8 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>`,
+    recording: `<div class="relative"><svg class="h-8 w-8 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 10.5l4.72-4.72a.75.75 0 011.28.53v11.38a.75.75 0 01-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 002.25-2.25v-9a2.25 2.25 0 00-2.25-2.25h-9A2.25 2.25 0 002.25 7.5v9a2.25 2.25 0 002.25 2.25z" /></svg><span class="absolute -top-1 -right-1 flex h-3 w-3"><span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span><span class="relative inline-flex rounded-full h-3 w-3 bg-red-600"></span></span></div>`,
+    spinner: (color) => `<svg class="animate-spin h-8 w-8 ${color}" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>`,
+    done: `<svg class="h-8 w-8 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>`,
+    error: `<svg class="h-8 w-8 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>`,
+    unknown: `<svg class="h-8 w-8 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M9.879 7.519c1.171-1.025 3.071-1.025 4.242 0 1.172 1.025 1.172 2.687 0 3.712-.203.179-.43.326-.67.442-.745.361-1.45.999-1.45 1.827v.75M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9 5.25h.008v.008H12v-.008z" /></svg>`
+};
+
 function startPolling(jobId) {
 	// Legacy single-job polling retained for compatibility but not used for multiple cards.
 	currentJobId = jobId;
@@ -679,7 +688,7 @@ async function fetchStatus() {
 	}
 }
 
-function updateStatusCardData(data) {
+	function updateStatusCardData(data) {
     // Note: This function only runs if using the legacy single #status-card approach
 	const nameEl = document.getElementById("status-name"); if (nameEl) nameEl.textContent = data.recordingName || data.recording_name || "Unknown Recording";
 
@@ -699,26 +708,26 @@ function updateStatusCardData(data) {
 	if (cancelBtn) cancelBtn.classList.add("hidden");
 	if (errorText) errorText.classList.add("hidden");
 	if (progressContainer) progressContainer.classList.add("hidden");
-	if (iconEl) iconEl.className = "text-4xl w-12 h-12 flex items-center justify-center";
+	if (iconEl) iconEl.className = "status-icon flex-shrink-0 w-12 h-12 flex items-center justify-center";
 
 	switch(status) {
 		case 'pending':
-			if (iconEl) iconEl.innerHTML = "⏳";
+			if (iconEl) iconEl.innerHTML = SVGS.pending;
 			if (labelEl) { labelEl.textContent = "Pending"; labelEl.className = "font-medium text-gray-800"; }
 			if (cancelBtn) cancelBtn.classList.remove("hidden");
 			break;
 		case 'recording':
-			if (iconEl) { iconEl.innerHTML = "🔴"; iconEl.classList.add("pulse"); }
+			if (iconEl) iconEl.innerHTML = SVGS.recording;
 			if (labelEl) { labelEl.textContent = "Recording Live"; labelEl.className = "font-medium text-red-700"; }
 			if (cancelBtn) cancelBtn.classList.remove("hidden");
 			if (progressContainer) progressContainer.classList.remove("hidden");
 			break;
 		case 'uploading':
-			if (iconEl) { iconEl.innerHTML = "🔄"; iconEl.classList.add("spin"); }
+			if (iconEl) iconEl.innerHTML = SVGS.spinner('text-blue-500');
 			if (labelEl) { labelEl.textContent = "Uploading to Storage"; labelEl.className = "font-medium text-blue-700"; }
 			break;
 		case 'done':
-			if (iconEl) iconEl.innerHTML = "✅";
+			if (iconEl) iconEl.innerHTML = SVGS.done;
 			if (labelEl) { labelEl.textContent = "Done"; labelEl.className = "font-medium text-green-700"; }
 			const dl = data.downloadUrl || data.download_url;
 			if (dl && downloadBtn) {
@@ -729,12 +738,12 @@ function updateStatusCardData(data) {
 			}
 			break;
 		case 'error':
-			if (iconEl) iconEl.innerHTML = "❌";
+			if (iconEl) iconEl.innerHTML = SVGS.error;
 			if (labelEl) { labelEl.textContent = "Error"; labelEl.className = "font-medium text-red-700"; }
 			if (errorText) { errorText.textContent = data.errorMessage || data.error || "An unknown error occurred."; errorText.classList.remove("hidden"); }
 			break;
 		default:
-			if (iconEl) iconEl.innerHTML = "❓";
+			if (iconEl) iconEl.innerHTML = SVGS.unknown;
 			if (labelEl) labelEl.textContent = status;
 	}
 
@@ -819,23 +828,23 @@ function renderActiveStatusCards(recordings) {
 
 		// Set visuals based on status
 		if (status === 'pending') {
-			if (iconEl) iconEl.textContent = '⏳';
+			if (iconEl) iconEl.innerHTML = SVGS.pending;
 			if (labelEl) labelEl.textContent = 'Pending';
 			if (cancelEl) cancelEl.style.display = 'inline-block'; // force show using inline CSS
 		} else if (status === 'recording') {
-			if (iconEl) { iconEl.textContent = '🔴'; iconEl.classList.add('pulse'); }
+			if (iconEl) iconEl.innerHTML = SVGS.recording;
 			if (labelEl) { labelEl.textContent = 'Recording Live'; labelEl.classList.add('text-red-700'); }
 			if (cancelEl) cancelEl.style.display = 'inline-block'; // force show using inline CSS
 			if (progressContainer) progressContainer.classList.remove('hidden');
 		} else if (status === 'uploading') {
-			if (iconEl) { iconEl.textContent = '🔄'; iconEl.classList.add('spin'); }
+			if (iconEl) iconEl.innerHTML = SVGS.spinner('text-blue-500');
 			if (labelEl) labelEl.textContent = 'Uploading to Storage';
 			// cancelEl stays hidden
 		} else if (status === 'clipping') {
-			if (iconEl) iconEl.textContent = '✂️';
+			if (iconEl) iconEl.innerHTML = SVGS.spinner('text-purple-600');
 			if (labelEl) { labelEl.textContent = 'Extracting Clip'; labelEl.classList.add('text-purple-700'); }
 		} else if (status === 'rendering') {
-			if (iconEl) iconEl.textContent = '🎬';
+			if (iconEl) iconEl.innerHTML = SVGS.spinner('text-yellow-600');
 			if (labelEl) { labelEl.textContent = 'Rendering'; labelEl.classList.add('text-yellow-700'); }
 		}
 
