@@ -153,8 +153,10 @@ async function openInEditor(jobId) {
     const loadingIcon = document.getElementById('video-loading-icon');
     const loadingText = document.getElementById('video-loading-text');
     loadingEl.classList.remove('hidden');
-    loadingIcon.textContent = '⚙️';
-    loadingIcon.className = 'text-4xl mb-3 spin inline-block';
+    loadingIcon.innerHTML = `<svg class="animate-spin h-10 w-10 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+    </svg>`;
     loadingText.textContent = 'Loading video...';
 
     // Disable render until metadata loads
@@ -185,8 +187,7 @@ async function openInEditor(jobId) {
         video.load();
 
     } catch (e) {
-        loadingIcon.textContent = '❌';
-        loadingIcon.className = 'text-4xl mb-3 inline-block';
+        loadingIcon.innerHTML = '<span class="text-4xl text-red-500">❌</span>';
         loadingText.textContent = `Failed to load video: ${e.message}`;
     }
 }
@@ -254,8 +255,7 @@ function initVideoEvents() {
         const icon = document.getElementById('video-loading-icon');
         const text = document.getElementById('video-loading-text');
         document.getElementById('video-loading').classList.remove('hidden');
-        icon.textContent = '❌';
-        icon.className = 'text-4xl mb-3 inline-block';
+        icon.innerHTML = '<span class="text-4xl text-red-500">❌</span>';
         text.textContent = 'Failed to load video. Try going back and re-opening.';
     });
 }
