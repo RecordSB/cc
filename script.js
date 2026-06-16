@@ -1047,7 +1047,20 @@ async function loadLogs() {
 
 		updateAdminStats(logs);
 
-		if (filterVal !== 'all') logs = logs.filter(l => ((l.level||'info').toLowerCase()) === filterVal);
+		// Pre-filter logs based on select dropdown if it's not "all"
+		if (filterVal !== 'all') {
+			logs = logs.filter(l => {
+				const eName = (l.event_type || l.event || '').toLowerCase();
+				let lvl = (l.level || 'info').toLowerCase();
+				// If level isn't explicitly set by backend, infer it to make filtering work
+				if (!l.level) {
+					if (eName.includes('error') || eName.includes('fail') || eName.includes('unauthorized')) lvl = 'error';
+					else if (eName.includes('warn')) lvl = 'warning';
+					else if (eName.includes('success') || eName.includes('done')) lvl = 'success';
+				}
+				return lvl === filterVal;
+			});
+		}
 
 		tbody.innerHTML = '';
 		if (!logs || logs.length === 0) {
@@ -1057,16 +1070,30 @@ async function loadLogs() {
 
 		logs.forEach(log => {
 			const tr = document.createElement('tr');
-			const level = (log.level || 'info').toLowerCase();
+			
+			// Use event_type first, fall back to event, then default to info
+			const eventName = log.event_type || log.event || 'info';
+			let level = (log.level || 'info').toLowerCase();
+			
+			// Try to automatically color-code the badge if a "level" isn't explicitly provided
+			if (!log.level) {
+				const eNameLower = eventName.toLowerCase();
+				if (eNameLower.includes('error') || eNameLower.includes('fail') || eNameLower.includes('unauthorized')) level = 'error';
+				else if (eNameLower.includes('warn')) level = 'warning';
+				else if (eNameLower.includes('success') || eNameLower.includes('done')) level = 'success';
+			}
+
 			const badgeClass = getBadgeClassForLevel(level);
 			let details = log.details || {};
 			let detailsText = typeof details === 'string' ? details : JSON.stringify(details);
-			if (log.event === 'record_finish' && details.fileSize) detailsText = `Size: ${details.fileSize}`;
-			if (log.event === 'login_fail') detailsText = `Wrong password attempt`;
+			
+			// Friendly translations for specific events
+			if (eventName === 'record_finish' && details.fileSize) detailsText = `Size: ${details.fileSize}`;
+			if (eventName === 'login_fail') detailsText = `Wrong password attempt`;
 
 			tr.innerHTML = `
 				<td class="px-6 py-4 whitespace-nowrap text-xs text-gray-500">${new Date(log.timestamp).toLocaleString()}</td>
-				<td class="px-6 py-4 whitespace-nowrap"><span class="badge ${badgeClass}">${escapeHtml(log.event || level)}</span></td>
+				<td class="px-6 py-4 whitespace-nowrap"><span class="badge ${badgeClass}">${escapeHtml(eventName)}</span></td>
 				<td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${escapeHtml(log.role || 'system')}</td>
 				<td class="px-6 py-4 text-sm text-gray-500 truncate max-w-xs" title="${escapeHtml(detailsText)}">${escapeHtml(detailsText)}</td>
 			`;
