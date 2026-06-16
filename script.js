@@ -588,13 +588,13 @@ async function handleScheduleRecording(e) {
 	const errorEl = document.getElementById("schedule-error");
 	if (errorEl) errorEl.classList.add("hidden");
 
-	const sessionName = (document.getElementById("session-name") || {}).value || "";
 	const recordingName = (document.getElementById("recording-name") || {}).value || "";
+	const sessionName = recordingName; // Session name mirrors recording name implicitly
 	const duration = parseInt((document.getElementById("duration") || {}).value, 10);
 	const startNow = !!(document.getElementById("start-now") && document.getElementById("start-now").checked);
 	const startTimeInput = (document.getElementById("start-time") || {}).value || "";
 
-	if (!sessionName.trim() || !recordingName.trim()) return showScheduleError("Names cannot be empty.");
+	if (!recordingName.trim()) return showScheduleError("Recording name cannot be empty.");
 	if (isNaN(duration) || duration <= 0) return showScheduleError("Please enter a valid duration in minutes.");
 
 	let startTime;
