@@ -1132,14 +1132,6 @@ async function loadAdminRecordings() {
 			div.className = 'py-3 flex justify-between items-center';
 			const watchBtnHtml = canWatch ? `<a href="#" onclick="watchRecording('${rec.id || rec.jobId}'); return false;" class="ml-2 inline-flex items-center px-2.5 py-1.5 border border-blue-300 shadow-sm text-xs font-medium rounded text-blue-700 bg-white hover:bg-blue-50">Watch</a>` : '';
 			const deleteBtnHtml = hideDeleteBtn ? '' : `<button class="ml-2 inline-flex items-center px-2.5 py-1.5 border border-red-300 shadow-sm text-xs font-medium rounded text-red-700 bg-white hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500" onclick="window.deleteRecording('${rec.id || rec.jobId}')">Delete</button>`;
-			const eraseBtnHtml = isR2Deleted ? `<button class="ml-2 inline-flex items-center px-2.5 py-1.5 border border-gray-300 shadow-sm text-xs font-medium rounded text-gray-500 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-400" onclick="window.eraseRecord('${rec.id || rec.jobId}')">Erase Record</button>` : '';const isR2Deleted = status === 'deleted' || status === 'removed' || rec.deleted === true || rec.isDeleted === true;
-			const hideDeleteBtn = isR2Deleted || ['canceled', 'cancelled', 'uploading', 'clipping', 'rendering'].includes(status);
-			const canWatch = status === 'done' && !hideDeleteBtn;
-
-			const div = document.createElement('div');
-			div.className = 'py-3 flex justify-between items-center';
-			const watchBtnHtml = canWatch ? `<a href="#" onclick="watchRecording('${rec.id || rec.jobId}'); return false;" class="ml-2 inline-flex items-center px-2.5 py-1.5 border border-blue-300 shadow-sm text-xs font-medium rounded text-blue-700 bg-white hover:bg-blue-50">Watch</a>` : '';
-			const deleteBtnHtml = hideDeleteBtn ? '' : `<button class="ml-2 inline-flex items-center px-2.5 py-1.5 border border-red-300 shadow-sm text-xs font-medium rounded text-red-700 bg-white hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500" onclick="window.deleteRecording('${rec.id || rec.jobId}')">Delete</button>`;
 			const eraseBtnHtml = isR2Deleted ? `<button class="ml-2 inline-flex items-center px-2.5 py-1.5 border border-gray-300 shadow-sm text-xs font-medium rounded text-gray-500 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-400" onclick="window.eraseRecord('${rec.id || rec.jobId}')">Erase Record</button>` : '';
 			div.innerHTML = `
 				<div class="flex-1 min-w-0 pr-4">
