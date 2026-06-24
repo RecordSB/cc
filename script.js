@@ -1124,14 +1124,23 @@ async function loadAdminRecordings() {
 		recordings.forEach(rec => {
 			const status = (rec.status || '').toString().toLowerCase();
 			
-			const hideDeleteBtn = ['deleted', 'removed', 'canceled', 'cancelled', 'uploading', 'clipping', 'rendering'].includes(status) || rec.deleted === true || rec.isDeleted === true;
+			const isR2Deleted = status === 'deleted' || status === 'removed' || rec.deleted === true || rec.isDeleted === true;
+			const hideDeleteBtn = isR2Deleted || ['canceled', 'cancelled', 'uploading', 'clipping', 'rendering'].includes(status);
 			const canWatch = status === 'done' && !hideDeleteBtn;
 
 			const div = document.createElement('div');
-			div.className = 'py-3 flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-center';
-			const watchBtnHtml = canWatch ? `<a href="#" onclick="watchRecording('${rec.id || rec.jobId}'); return false;" class="inline-flex items-center justify-center px-2.5 py-1.5 border border-blue-300 shadow-sm text-xs font-medium rounded text-blue-700 bg-white hover:bg-blue-50">Watch</a>` : '';
-			const deleteBtnHtml = hideDeleteBtn ? '' : `<button class="inline-flex items-center justify-center px-2.5 py-1.5 border border-red-300 shadow-sm text-xs font-medium rounded text-red-700 bg-white hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500" onclick="window.deleteRecording('${rec.id || rec.jobId}')">Delete</button>`;
+			div.className = 'py-3 flex justify-between items-center';
+			const watchBtnHtml = canWatch ? `<a href="#" onclick="watchRecording('${rec.id || rec.jobId}'); return false;" class="ml-2 inline-flex items-center px-2.5 py-1.5 border border-blue-300 shadow-sm text-xs font-medium rounded text-blue-700 bg-white hover:bg-blue-50">Watch</a>` : '';
+			const deleteBtnHtml = hideDeleteBtn ? '' : `<button class="ml-2 inline-flex items-center px-2.5 py-1.5 border border-red-300 shadow-sm text-xs font-medium rounded text-red-700 bg-white hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500" onclick="window.deleteRecording('${rec.id || rec.jobId}')">Delete</button>`;
+			const eraseBtnHtml = isR2Deleted ? `<button class="ml-2 inline-flex items-center px-2.5 py-1.5 border border-gray-300 shadow-sm text-xs font-medium rounded text-gray-500 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-400" onclick="window.eraseRecord('${rec.id || rec.jobId}')">Erase Record</button>` : '';const isR2Deleted = status === 'deleted' || status === 'removed' || rec.deleted === true || rec.isDeleted === true;
+			const hideDeleteBtn = isR2Deleted || ['canceled', 'cancelled', 'uploading', 'clipping', 'rendering'].includes(status);
+			const canWatch = status === 'done' && !hideDeleteBtn;
 
+			const div = document.createElement('div');
+			div.className = 'py-3 flex justify-between items-center';
+			const watchBtnHtml = canWatch ? `<a href="#" onclick="watchRecording('${rec.id || rec.jobId}'); return false;" class="ml-2 inline-flex items-center px-2.5 py-1.5 border border-blue-300 shadow-sm text-xs font-medium rounded text-blue-700 bg-white hover:bg-blue-50">Watch</a>` : '';
+			const deleteBtnHtml = hideDeleteBtn ? '' : `<button class="ml-2 inline-flex items-center px-2.5 py-1.5 border border-red-300 shadow-sm text-xs font-medium rounded text-red-700 bg-white hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500" onclick="window.deleteRecording('${rec.id || rec.jobId}')">Delete</button>`;
+			const eraseBtnHtml = isR2Deleted ? `<button class="ml-2 inline-flex items-center px-2.5 py-1.5 border border-gray-300 shadow-sm text-xs font-medium rounded text-gray-500 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-400" onclick="window.eraseRecord('${rec.id || rec.jobId}')">Erase Record</button>` : '';
 			div.innerHTML = `
 				<div class="flex-1 min-w-0 pr-4">
 					<p class="text-sm font-medium text-gray-900 truncate">
@@ -1142,7 +1151,7 @@ async function loadAdminRecordings() {
 					<p class="text-xs text-gray-500 mt-1">Downloads: ${escapeHtml(String(rec.download_count || rec.downloadCount || 0))}</p>
 				</div>
 				<div class="recording-actions w-full sm:w-auto flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:flex-shrink-0">
-					${watchBtnHtml}${deleteBtnHtml}
+					${watchBtnHtml}${deleteBtnHtml}${eraseBtnHtml}
 				</div>
 			`;
 
@@ -1174,6 +1183,16 @@ window.deleteRecording = async function(id) {
 		if (!res.ok) throw new Error('Delete failed');
 		loadAdminRecordings(); loadRecordings();
 	} catch (e) { alert('Error deleting recording: ' + e.message); }
+};
+
+window.eraseRecord = async function(id) {
+    if (!confirm("This will permanently remove this record from the system log. The file is already deleted from storage. Continue?")) return;
+    try {
+        const res = await apiCall(`/recordings/${id}`, 'DELETE');
+        if (!res.ok) throw new Error('Erase failed');
+        loadAdminRecordings();
+        loadRecordings();
+    } catch (e) { alert('Error erasing record: ' + e.message); }
 };
 
 // ==========================================
