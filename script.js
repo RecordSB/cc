@@ -1244,7 +1244,7 @@ window.downloadRecording = async function(id, suggestedName) {
 };
 
 window.copyShareLink = function(el, name) {
-    const url = `https://recordsb.github.io/cc/clip.html/#${name}`;
+    const url = `https://recordsb.github.io/cc/clip.html#${name}`;
     navigator.clipboard.writeText(url).then(() => {
         showTooltip(el, 'Share Link Copied!');
     }).catch(err => {
