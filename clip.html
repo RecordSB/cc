@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RecordSB — Clip View</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body class="bg-gray-50 text-gray-900 font-sans min-h-screen">
+
+    <!-- LOGIN SCREEN (Embedded on clip.html when not authenticated) -->
+    <div id="login-screen-clip" class="hidden flex items-center justify-center min-h-screen">
+        <div class="bg-white p-8 rounded-xl shadow-lg max-w-sm w-full">
+            <div class="text-center mb-6">
+                <h1 class="text-2xl font-bold text-gray-800">St. Bernadette Livestream Recorder</h1>
+                <p class="text-gray-500 text-sm mt-1">Please log in to view clip</p>
+            </div>
+            <form id="login-form-clip" class="space-y-4">
+                <div>
+                    <label for="password-clip" class="block text-sm font-medium text-gray-700">Password</label>
+                    <input type="password" id="password-clip" required 
+                        class="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500">
+                </div>
+                <div id="login-error-clip" class="hidden text-sm text-red-600 bg-red-50 p-3 rounded-md"></div>
+                <button type="submit" id="login-submit-clip" 
+                    class="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors">
+                    Log In
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <!-- MAIN WRAPPER (Hidden when login prompt is shown) -->
+    <div id="clip-app-wrapper">
+        <!-- ===================== HEADER ===================== -->
+        <header class="bg-white border-b border-gray-200 sticky top-0 z-30">
+            <div class="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between gap-3">
+                <div class="flex items-center gap-3 min-w-0">
+                    <button onclick="window.location.href='index.html'"
+                        class="flex-shrink-0 flex items-center gap-1 text-sm text-gray-500 hover:text-gray-900 transition-colors">
+                        <span>←</span>
+                        <span class="hidden sm:inline">Home</span>
+                    </button>
+                    <div class="hidden sm:block w-px h-4 bg-gray-300 flex-shrink-0"></div>
+                    <span class="text-sm font-semibold text-gray-900 flex-shrink-0">Recording Clip</span>
+                    <span id="clip-header-name" class="hidden text-sm text-gray-500 truncate max-w-xs"></span>
+                </div>
+                <div id="header-actions" class="flex items-center gap-2"></div>
+            </div>
+        </header>
+
+        <!-- ===================== MAIN CONTENT ===================== -->
+        <main class="max-w-4xl mx-auto px-4 py-8 space-y-6">
+
+            <!-- Loading state -->
+            <div id="clip-loading" class="bg-white rounded-xl shadow-sm border border-gray-200 p-12 text-center">
+                <div class="flex justify-center items-center mb-3">
+                    <svg class="animate-spin h-8 w-8 text-blue-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                </div>
+                <p class="text-sm text-gray-500">Loading clip information...</p>
+            </div>
+
+            <!-- Not Found / Deleted states -->
+            <div id="clip-error-card" class="hidden bg-white rounded-xl shadow-sm border border-gray-200 p-8 text-center space-y-4">
+                <h2 id="clip-error-title" class="text-xl font-bold text-gray-900">Clip Not Found</h2>
+                <p id="clip-error-desc" class="text-sm text-gray-500 max-w-md mx-auto">The requested recording does not exist or has been removed.</p>
+                <div>
+                    <a href="index.html" class="inline-flex items-center px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700 transition-colors">
+                        Return Home
+                    </a>
+                </div>
+            </div>
+
+            <!-- Success view -->
+            <div id="clip-content" class="hidden space-y-6">
+
+                <!-- Clip Information Card -->
+                <section class="bg-white rounded-xl shadow-sm border border-gray-200 p-6 space-y-6">
+                    <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-gray-200 pb-5">
+                        <div class="space-y-1 min-w-0">
+                            <h1 id="clip-title" class="text-xl sm:text-2xl font-bold text-gray-900 truncate">Recording Name</h1>
+                            <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-gray-500">
+                                <span id="clip-date">-</span>
+                                <span>&bull;</span>
+                                <span id="clip-duration">-</span>
+                                <span>&bull;</span>
+                                <span id="clip-status-badge" class="badge">done</span>
+                                <span id="clip-autodelete" class="hidden"></span>
+                            </div>
+                        </div>
+                        <div id="clip-action-buttons" class="flex items-center gap-2 flex-shrink-0 w-full sm:w-auto">
+                            <!-- Populated via JS -->
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 pt-1">
+                        <div class="bg-gray-50 p-3 rounded-lg">
+                            <p class="text-xs font-medium text-gray-500">Downloads</p>
+                            <p id="clip-downloads" class="mt-1 text-lg font-semibold text-gray-900">0</p>
+                        </div>
+                        <div class="bg-gray-50 p-3 rounded-lg">
+                            <p class="text-xs font-medium text-gray-500">File Type</p>
+                            <p id="clip-type" class="mt-1 text-lg font-semibold text-gray-900">MP4 Video</p>
+                        </div>
+                        <div class="bg-gray-50 p-3 rounded-lg">
+                            <p class="text-xs font-medium text-gray-500">Storage ID</p>
+                            <p id="clip-id" class="mt-1 text-xs font-mono text-gray-700 truncate">-</p>
+                        </div>
+                        <div class="bg-gray-50 p-3 rounded-lg">
+                            <p class="text-xs font-medium text-gray-500">Deletion Status</p>
+                            <p id="clip-deletion-status" class="mt-1 text-sm font-medium text-gray-900">Active</p>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Watch Preview Section -->
+                <section class="bg-white rounded-xl shadow-sm border border-gray-200 p-6 space-y-4">
+                    <h2 class="text-lg font-semibold text-gray-900">Watch Preview</h2>
+                    <div id="video-preview-container" class="relative bg-black rounded-xl overflow-hidden shadow-inner">
+                        <div id="preview-loading" class="absolute inset-0 z-10 flex flex-col items-center justify-center bg-black bg-opacity-75">
+                            <svg class="animate-spin h-8 w-8 text-white mb-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                            <p class="text-xs text-gray-300">Loading video stream...</p>
+                        </div>
+                        <video id="clip-video-player"
+                            class="w-full max-h-[500px] object-contain mx-auto"
+                            controls
+                            playsinline
+                            preload="metadata">
+                        </video>
+                    </div>
+                </section>
+
+            </div>
+
+        </main>
+    </div>
+
+    <script src="clip.js" defer></script>
+</body>
+</html>
