@@ -966,9 +966,13 @@ async function loadRecordings() {
 			const canDownload = status === 'done' && (rec.download_url || rec.downloadUrl);
 			if (canDownload && !isDeleted) {
 				const id = rec.id || rec.jobId;
+			             const recName = rec.recording_name || rec.recordingName || '';
 				actionButtonsHtml = `
 					<a href="#" onclick="watchRecording('${id}'); return false;" class="inline-flex items-center px-3 py-1.5 border border-blue-300 text-xs font-medium rounded shadow-sm text-blue-700 bg-white hover:bg-blue-50">Watch</a>
-					<a href="#" onclick="downloadRecording('${id}', '${escapeHtml(rec.recording_name || rec.recordingName || '')}'); return false;" class="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded shadow-sm text-white bg-blue-600 hover:bg-blue-700">Download</a>
+					               <a href="#" onclick="copyShareLink(this, '${encodeURIComponent(recName)}'); return false;" class="inline-flex items-center px-3 py-1.5 border border-gray-300 text-xs font-medium rounded shadow-sm text-gray-700 bg-white hover:bg-gray-50 focus:outline-none">
+					                   <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path fill-rule="evenodd" clip-rule="evenodd" d="M1 18.5088C1 13.1679 4.90169 8.77098 9.99995 7.84598V5.51119C9.99995 3.63887 12.1534 2.58563 13.6313 3.73514L21.9742 10.224C23.1323 11.1248 23.1324 12.8752 21.9742 13.7761L13.6314 20.2649C12.1534 21.4144 10 20.3612 10 18.4888V16.5189C7.74106 16.9525 5.9625 18.1157 4.92778 19.6838C4.33222 20.5863 3.30568 20.7735 2.55965 20.5635C1.80473 20.3511 1.00011 19.6306 1 18.5088ZM12.4034 5.31385C12.2392 5.18613 11.9999 5.30315 11.9999 5.51119V9.41672C11.9999 9.55479 11.8873 9.66637 11.7493 9.67008C8.09094 9.76836 4.97774 12.0115 3.66558 15.1656C3.46812 15.6402 3.31145 16.1354 3.19984 16.6471C3.07554 17.217 3.00713 17.8072 3.00053 18.412C3.00018 18.4442 3 18.4765 3 18.5088C3.00001 18.6437 3.18418 18.6948 3.25846 18.5822C3.27467 18.5577 3.29101 18.5332 3.30747 18.5088C3.30748 18.5088 3.30746 18.5088 3.30747 18.5088C3.63446 18.0244 4.01059 17.5765 4.42994 17.168C4.71487 16.8905 5.01975 16.6313 5.34276 16.3912C7.05882 15.1158 9.28642 14.3823 11.7496 14.3357C11.8877 14.3331 12 14.4453 12 14.5834V18.4888C12 18.6969 12.2393 18.8139 12.4035 18.6862L20.7463 12.1973C20.875 12.0973 20.875 11.9028 20.7463 11.8027L12.4034 5.31385Z" fill="currentColor"/></svg>
+					               </a>
+					<a href="#" onclick="downloadRecording('${id}', '${escapeHtml(recName)}'); return false;" class="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded shadow-sm text-white bg-blue-600 hover:bg-blue-700">Download</a>
 				`;
 			}
 
@@ -1078,7 +1082,9 @@ async function loadLogs() {
 			// Try to automatically color-code the badge if a "level" isn't explicitly provided
 			if (!log.level) {
 				const eNameLower = eventName.toLowerCase();
-				if (eNameLower.includes('error') || eNameLower.includes('fail') || eNameLower.includes('unauthorized')) level = 'error';
+				if (eNameLower.includes('buffer')) level = 'buffer';
+				else if (eNameLower.includes('start')) level = 'start';
+				else if (eNameLower.includes('error') || eNameLower.includes('fail') || eNameLower.includes('unauthorized')) level = 'error';
 				else if (eNameLower.includes('warn')) level = 'warning';
 				else if (eNameLower.includes('success') || eNameLower.includes('done')) level = 'success';
 			}
@@ -1203,6 +1209,8 @@ function getBadgeClassForLevel(level) {
 		case 'success': return 'badge-success';
 		case 'error': return 'badge-danger';
 		case 'warning': return 'badge-warning';
+		case 'buffer': return 'badge-buffer';
+		case 'start': return 'badge-start';
 		default: return 'badge-info';
 	}
 }
@@ -1234,6 +1242,122 @@ window.downloadRecording = async function(id, suggestedName) {
         alert('Download failed: ' + (e.message || e));
     }
 };
+
+window.copyShareLink = function(el, name) {
+    const url = `https://recordsb.github.io/cc/clip.html/#${name}`;
+    navigator.clipboard.writeText(url).then(() => {
+        showTooltip(el, 'Share Link Copied!');
+    }).catch(err => {
+        console.error('Failed to copy: ', err);
+    });
+};
+
+function showTooltip(el, message) {
+    // NOTE: this element is styled entirely with inline styles, never
+    // Tailwind utility classes. Tailwind's CDN/JIT compiler only generates
+    // CSS for classes it can find while scanning the page's HTML/DOM - it
+    // does not reliably pick up class names that only ever appear as
+    // strings inside an external .js file. That's why this toast would
+    // sometimes render with none of its styling applied and fall back to
+    // a plain full-width block div. Inline styles apply synchronously and
+    // never depend on that scan. This now matches clip.js: a small
+    // tooltip centered under the button that triggered it, instead of a
+    // corner toast, so behavior is consistent across pages.
+    let tooltip = document.getElementById('recordsb-tooltip');
+    if (!tooltip) {
+        tooltip = document.createElement('div');
+        tooltip.id = 'recordsb-tooltip';
+        document.body.appendChild(tooltip);
+    }
+
+    tooltip.style.cssText = `
+        position: fixed;
+        top: -9999px;
+        left: -9999px;
+        z-index: 9999;
+        box-sizing: border-box;
+        display: block;
+        width: max-content;
+        max-width: 260px;
+        margin: 0;
+        padding: 6px 10px;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        font-size: 12px;
+        font-weight: 500;
+        line-height: 1.3;
+        color: #374151;
+        background-color: #ffffff;
+        border: 1px solid #d1d5db;
+        border-radius: 6px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.12);
+        white-space: normal;
+        text-align: center;
+        pointer-events: none;
+        opacity: 0;
+        transition: opacity 150ms ease;
+    `;
+
+    tooltip.textContent = message;
+
+    // `position: fixed` anchors to the viewport, not to the button, so a
+    // one-time position calculation goes stale the instant the page
+    // scrolls - the button moves with the content, the tooltip doesn't.
+    // Recomputing on every scroll/resize keeps it glued to the button.
+    function positionTooltip() {
+        const btnRect = el.getBoundingClientRect();
+        const tipRect = tooltip.getBoundingClientRect();
+
+        let left = btnRect.left + (btnRect.width / 2) - (tipRect.width / 2);
+        left = Math.max(8, Math.min(left, window.innerWidth - tipRect.width - 8));
+
+        let top = btnRect.bottom + 8;
+        // Flip above the button if there's no room below it.
+        if (top + tipRect.height > window.innerHeight - 8) {
+            top = btnRect.top - tipRect.height - 8;
+        }
+
+        tooltip.style.left = `${left}px`;
+        tooltip.style.top = `${top}px`;
+    }
+
+    // Wait a frame so the browser has actually laid the element out with
+    // its new text/width before we measure and position it - this is what
+    // guarantees correct centering on the very first click, not just the
+    // second one.
+    requestAnimationFrame(() => {
+        positionTooltip();
+        tooltip.style.opacity = '1';
+    });
+
+    // Throttle scroll/resize repositioning to one update per frame.
+    // `capture: true` on window catches scroll events fired on any
+    // scrollable container on the page, not just the window itself
+    // (scroll events don't bubble, but the capture phase still reaches
+    // window on the way down).
+    let repositionQueued = false;
+    function onViewportChange() {
+        if (repositionQueued) return;
+        repositionQueued = true;
+        requestAnimationFrame(() => {
+            positionTooltip();
+            repositionQueued = false;
+        });
+    }
+
+    if (tooltip._cleanupListeners) tooltip._cleanupListeners();
+    window.addEventListener('scroll', onViewportChange, { passive: true, capture: true });
+    window.addEventListener('resize', onViewportChange, { passive: true });
+    tooltip._cleanupListeners = () => {
+        window.removeEventListener('scroll', onViewportChange, { capture: true });
+        window.removeEventListener('resize', onViewportChange);
+    };
+
+    // Clear existing timeout to handle rapid button clicks correctly
+    if (tooltip._hideTimeout) clearTimeout(tooltip._hideTimeout);
+    tooltip._hideTimeout = setTimeout(() => {
+        tooltip.style.opacity = '0';
+    }, 2000);
+}
 
 window.watchRecording = async function(id) {
     if (!id) return alert('Missing recording id');
