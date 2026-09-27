@@ -73,11 +73,37 @@
 .badge-rendering { background-color: #fef3c7; color: #92400e; }
 
 /* Responsive recording action buttons */
+.recording-actions {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.5rem;
+	max-width: 100%;
+}
+
 .recording-actions > a,
 .recording-actions > button {
 	justify-content: center;
 	text-align: center;
 	white-space: nowrap;
+	flex: 0 0 auto;
+	min-width: 0;
+}
+
+#schedule-form .grid,
+#schedule-form .grid > div,
+#schedule-form input,
+#schedule-form select,
+#schedule-form textarea {
+	min-width: 0;
+	max-width: 100%;
+	box-sizing: border-box;
+}
+
+#recording-name,
+#start-time,
+#duration {
+	width: 100%;
+	max-width: 100%;
 }
 
 /* Hide scrollbars for cleaner look on tables */
@@ -103,6 +129,22 @@
 		gap: 0.75rem;
 	}
 
+	/* Keep the form controls aligned to the grid and prevent overflow */
+	#schedule-form .grid {
+		grid-template-columns: minmax(0, 1fr);
+	}
+
+	#schedule-form .grid > div {
+		min-width: 0;
+	}
+
+	#recording-name,
+	#start-time,
+	#duration {
+		width: 100%;
+		max-width: 100%;
+	}
+
 	/* Make status card action buttons full-width and stacked on mobile */
 	.status-card-actions .btn-cancel,
 	.status-card-actions .btn-download {
@@ -110,11 +152,39 @@
 		width: 100% !important;
 	}
 
+	.recording-actions {
+		width: 100%;
+		justify-content: flex-start;
+		align-items: stretch;
+	}
+
 	.recording-actions > a,
 	.recording-actions > button {
-		width: 100%;
 		min-height: 2.5rem;
 		white-space: normal;
+	}
+
+	.recording-actions > .action-watch,
+	.recording-actions > .action-share {
+		flex: 1 1 calc(50% - 0.25rem);
+		max-width: calc(50% - 0.25rem);
+	}
+
+	.recording-actions > .action-download {
+		flex-basis: 100%;
+		max-width: 100%;
+		width: 100%;
+	}
+
+	.admin-actions {
+		width: auto;
+		justify-content: flex-end;
+	}
+
+	.admin-actions > a,
+	.admin-actions > button {
+		flex: 1 1 clamp(4.5rem, 22vw, 7.5rem);
+		max-width: clamp(4.5rem, 22vw, 7.5rem);
 	}
 
 	/* Slightly larger touch targets for form inputs */
