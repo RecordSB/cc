@@ -1,5 +1,15 @@
 // MAIN JAVASCRIPT LOGIC (extracted and cleaned)
 
+// Helper functions for base64 encoding/decoding of stored password
+function encodePassword(pw) {
+    if (!pw) return '';
+    try { return btoa(encodeURIComponent(pw)); } catch (e) { return pw; }
+}
+function decodePassword(encoded) {
+    if (!encoded) return '';
+    try { return decodeURIComponent(atob(encoded)); } catch (e) { return encoded; }
+}
+
 // ==========================================
 // Configuration & State
 // ==========================================
@@ -99,8 +109,9 @@ document.addEventListener("DOMContentLoaded", () => {
 		showLockoutScreen(lockoutRemainingMs());
 		return;
 	}
-	// Attempt silent auto-login from sessionStorage before showing login screen
-	const savedPassword = sessionStorage.getItem('recordsb_password');
+	// Attempt silent auto-login from local/session storage before showing login screen
+	const rawSaved = localStorage.getItem('recordsb_password') || sessionStorage.getItem('recordsb_password');
+	const savedPassword = decodePassword(rawSaved);
 	if (savedPassword) {
 		(async () => {
 			try {
@@ -116,6 +127,7 @@ document.addEventListener("DOMContentLoaded", () => {
 			} catch (e) {
 				// Saved password is stale or server unreachable — fall through to login screen
 				currentPassword = null;
+				localStorage.removeItem('recordsb_password');
 				sessionStorage.removeItem('recordsb_password');
 			}
 		})();
@@ -299,8 +311,10 @@ async function handleLogin(e) {
 		// successful authentication — reset local failed-attempts state
 		clearFailedAttempts();
 
-		// Persist password for the session so editor.html and live.html don't require re-login
-		sessionStorage.setItem('recordsb_password', pwdInput);
+		// Persist password for the session and locally so editor.html, live.html, and clip.html don't require re-login
+		const encodedPw = encodePassword(pwdInput);
+		localStorage.setItem('recordsb_password', encodedPw);
+		sessionStorage.setItem('recordsb_password', encodedPw);
 
 		showMainApp();
 
@@ -597,6 +611,18 @@ async function handleScheduleRecording(e) {
 	if (!recordingName.trim()) return showScheduleError("Recording name cannot be empty.");
 	if (isNaN(duration) || duration <= 0) return showScheduleError("Please enter a valid duration in minutes.");
 
+	try {
+		const capacity = await checkR2CapacityForNewRecording(duration);
+		if (!capacity.ok) {
+			showScheduleError(`Not enough R2 space: ${capacity.message}. Ask an admin to delete old recordings or reduce the duration.`);
+			return;
+		}
+	} catch (err) {
+		console.error('R2 capacity check failed:', err);
+		showScheduleError('Could not verify R2 capacity right now. Please try again.');
+		return;
+	}
+
 	let startTime;
 	if (startNow) startTime = new Date().toISOString();
 	else {
@@ -647,9 +673,9 @@ function showScheduleError(msg) {
 const SVGS = {
     pending: `<svg class="h-8 w-8 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>`,
     recording: `<div class="relative"><svg class="h-8 w-8 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 10.5l4.72-4.72a.75.75 0 011.28.53v11.38a.75.75 0 01-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 002.25-2.25v-9a2.25 2.25 0 00-2.25-2.25h-9A2.25 2.25 0 002.25 7.5v9a2.25 2.25 0 002.25 2.25z" /></svg><span class="absolute -top-1 -right-1 flex h-3 w-3"><span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span><span class="relative inline-flex rounded-full h-3 w-3 bg-red-600"></span></span></div>`,
-    spinner: (color) => `<svg class="animate-spin h-8 w-8 ${color}" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>`,
+    spinner: (color) => `<svg class="animate-spin h-8 w-8 ${color}" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l2.647-2.647z"></path></svg>`,
     done: `<svg class="h-8 w-8 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>`,
-    error: `<svg class="h-8 w-8 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>`,
+    error: `<svg class="h-8 w-8 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16.667c-.77 1.333.192 3.333 1.732 3z" /></svg>`,
     unknown: `<svg class="h-8 w-8 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M9.879 7.519c1.171-1.025 3.071-1.025 4.242 0 1.172 1.025 1.172 2.687 0 3.712-.203.179-.43.326-.67.442-.745.361-1.45.999-1.45 1.827v.75M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9 5.25h.008v.008H12v-.008z" /></svg>`
 };
 
@@ -957,7 +983,7 @@ async function loadRecordings() {
 
 		pastRecordings.forEach(rec => {
 			const div = document.createElement("div");
-			div.className = "py-4 flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-center";
+			div.className = "recording-row py-4 flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-center";
 
 			const status = (rec.status || '').toString().toLowerCase();
 			const isDeleted = ['deleted','removed','canceled','cancelled'].includes(status) || rec.deleted === true || rec.isDeleted === true;
@@ -966,13 +992,13 @@ async function loadRecordings() {
 			const canDownload = status === 'done' && (rec.download_url || rec.downloadUrl);
 			if (canDownload && !isDeleted) {
 				const id = rec.id || rec.jobId;
-			             const recName = rec.recording_name || rec.recordingName || '';
+				const recName = rec.recording_name || rec.recordingName || '';
 				actionButtonsHtml = `
-					<a href="#" onclick="watchRecording('${id}'); return false;" class="inline-flex items-center px-3 py-1.5 border border-blue-300 text-xs font-medium rounded shadow-sm text-blue-700 bg-white hover:bg-blue-50">Watch</a>
-					               <a href="#" onclick="copyShareLink(this, '${encodeURIComponent(recName)}'); return false;" class="inline-flex items-center px-3 py-1.5 border border-gray-300 text-xs font-medium rounded shadow-sm text-gray-700 bg-white hover:bg-gray-50 focus:outline-none">
-					                   <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path fill-rule="evenodd" clip-rule="evenodd" d="M1 18.5088C1 13.1679 4.90169 8.77098 9.99995 7.84598V5.51119C9.99995 3.63887 12.1534 2.58563 13.6313 3.73514L21.9742 10.224C23.1323 11.1248 23.1324 12.8752 21.9742 13.7761L13.6314 20.2649C12.1534 21.4144 10 20.3612 10 18.4888V16.5189C7.74106 16.9525 5.9625 18.1157 4.92778 19.6838C4.33222 20.5863 3.30568 20.7735 2.55965 20.5635C1.80473 20.3511 1.00011 19.6306 1 18.5088ZM12.4034 5.31385C12.2392 5.18613 11.9999 5.30315 11.9999 5.51119V9.41672C11.9999 9.55479 11.8873 9.66637 11.7493 9.67008C8.09094 9.76836 4.97774 12.0115 3.66558 15.1656C3.46812 15.6402 3.31145 16.1354 3.19984 16.6471C3.07554 17.217 3.00713 17.8072 3.00053 18.412C3.00018 18.4442 3 18.4765 3 18.5088C3.00001 18.6437 3.18418 18.6948 3.25846 18.5822C3.27467 18.5577 3.29101 18.5332 3.30747 18.5088C3.30748 18.5088 3.30746 18.5088 3.30747 18.5088C3.63446 18.0244 4.01059 17.5765 4.42994 17.168C4.71487 16.8905 5.01975 16.6313 5.34276 16.3912C7.05882 15.1158 9.28642 14.3823 11.7496 14.3357C11.8877 14.3331 12 14.4453 12 14.5834V18.4888C12 18.6969 12.2393 18.8139 12.4035 18.6862L20.7463 12.1973C20.875 12.0973 20.875 11.9028 20.7463 11.8027L12.4034 5.31385Z" fill="currentColor"/></svg>
-					               </a>
-					<a href="#" onclick="downloadRecording('${id}', '${escapeHtml(recName)}'); return false;" class="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded shadow-sm text-white bg-blue-600 hover:bg-blue-700">Download</a>
+					<a href="#" onclick="watchRecording('${id}'); return false;" class="action-watch inline-flex items-center justify-center px-3 py-1.5 border border-blue-300 text-xs font-medium rounded shadow-sm text-blue-700 bg-white hover:bg-blue-50">Watch</a>
+					<a href="#" onclick="copyShareLink(this, '${encodeURIComponent(recName)}'); return false;" class="action-share inline-flex items-center justify-center px-3 py-1.5 border border-gray-300 text-xs font-medium rounded shadow-sm text-gray-700 bg-white hover:bg-gray-50 focus:outline-none">
+						<svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path fill-rule="evenodd" clip-rule="evenodd" d="M1 18.5088C1 13.1679 4.90169 8.77098 9.99995 7.84598V5.51119C9.99995 3.63887 12.1534 2.58563 13.6313 3.73514L21.9742 10.224C23.1323 11.1248 23.1324 12.8752 21.9742 13.7761L13.6314 20.2649C12.1534 21.4144 10 20.3612 10 18.4888V16.5189C7.74106 16.9525 5.9625 18.1157 4.92778 19.6838C4.33222 20.5863 3.30568 20.7735 2.55965 20.5635C1.80473 20.3511 1.00011 19.6306 1 18.5088ZM12.4034 5.31385C12.2392 5.18613 11.9999 5.30315 11.9999 5.51119V9.41672C11.9999 9.55479 11.8873 9.66637 11.7493 9.67008C8.09094 9.76836 4.97774 12.0115 3.66558 15.1656C3.46812 15.6402 3.31145 16.1354 3.19984 16.647C3.07554 17.217 3.00713 17.807 3.00053 18.412C3.00018 18.4442 3 18.4765 3 18.5088C3.00001 18.6437 3.18418 18.6948 3.25846 18.5822C3.27467 18.5577 3.29101 18.5333 3.30747 18.5088C3.63446 18.0244 4.01059 17.5765 4.42994 17.168C7.05882 15.1158 9.28642 14.3823 11.7496 14.3357C11.8877 14.3331 12 14.4453 12 14.5834V18.4888C12 18.6969 12.2393 18.8139 12.4035 18.6862L20.7463 12.1973C20.875 12.0973 20.875 11.9028 20.7463 11.8027L12.4034 5.31385Z" fill="currentColor"/></svg>
+					</a>
+					<a href="#" onclick="downloadRecording('${id}', '${escapeHtml(recName)}'); return false;" class="action-download inline-flex items-center justify-center px-3 py-1.5 border border-transparent text-xs font-medium rounded shadow-sm text-white bg-blue-600 hover:bg-blue-700">Download</a>
 				`;
 			}
 
@@ -1005,7 +1031,7 @@ async function loadRecordings() {
 			}
 
 			div.innerHTML = `
-				<div class="flex-1 min-w-0 pr-4">
+				<div class="recording-info flex-1 min-w-0 pr-0 sm:pr-4">
 					<h4 class="text-sm font-medium text-gray-900 truncate">
 						${escapeHtml(rec.recording_name || rec.recordingName || '')}
 						${rec.job_type === 'clip' ? '<span class="ml-1.5 badge badge-clip">Buffer Clip</span>' : ''}
@@ -1020,7 +1046,7 @@ async function loadRecordings() {
 					</div>
 					<p class="text-xs text-gray-500 mt-1">Downloads: ${escapeHtml(String(rec.download_count || rec.downloadCount || 0))}</p>
 				</div>
-				<div class="recording-actions w-full sm:w-auto flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:flex-shrink-0">
+				<div class="recording-actions w-full sm:w-auto flex flex-row flex-wrap items-center gap-2 sm:flex-shrink-0">
 					${actionButtonsHtml}
 				</div>
 			`;
@@ -1111,13 +1137,82 @@ async function loadLogs() {
 	}
 }
 
+function formatStorageSize(bytes) {
+	const size = Number(bytes) || 0;
+	if (size >= 1073741824) return `${(size / 1073741824).toFixed(1)} GB`;
+	if (size >= 1048576) return `${(size / 1048576).toFixed(1)} MB`;
+	if (size >= 1024) return `${Math.round(size / 1024)} KB`;
+	return `${Math.round(size)} B`;
+}
+
+function estimateRecordingSizeMb(minutes) {
+	const mins = Number(minutes) || 0;
+	return Math.max(0, mins * 12.02);
+}
+
+function estimateRecordingSizeGb(minutes) {
+	return estimateRecordingSizeMb(minutes) / 1024;
+}
+
+async function fetchR2Usage() {
+	const res = await apiCall('/r2/gb');
+	if (!res.ok) {
+		throw new Error('Failed to fetch R2 inventory');
+	}
+	return await res.json();
+}
+
+async function checkR2CapacityForNewRecording(minutes) {
+	const usage = await fetchR2Usage();
+	const usageRes = await apiCall('/recordings');
+	if (!usageRes.ok) throw new Error('Failed to fetch scheduled recordings');
+	const recordings = await usageRes.json();
+
+	const currentUsedGb = Number(usage.total_gb || usage.used_gb || 0) || 0;
+	const limitGb = Number(usage.limit_gb || 10) || 10;
+	const newRecordGb = estimateRecordingSizeGb(minutes);
+
+	const scheduledEstimateGb = recordings.reduce((sum, rec) => {
+		const status = (rec.status || '').toString().toLowerCase();
+		if (['deleted', 'removed', 'canceled', 'cancelled'].includes(status)) return sum;
+		if (!['pending', 'recording', 'uploading', 'clipping', 'rendering'].includes(status)) return sum;
+
+		const durationMinutes = Number(rec.duration_minutes ?? rec.durationMinutes ?? 0) || 0;
+		if (durationMinutes <= 0) return sum;
+		return sum + estimateRecordingSizeGb(durationMinutes);
+	}, 0);
+
+	const projectedTotalGb = currentUsedGb + scheduledEstimateGb + newRecordGb;
+	const remainingGb = Math.max(0, limitGb - projectedTotalGb);
+
+	return {
+		ok: projectedTotalGb <= limitGb,
+		limitGb,
+		currentUsedGb,
+		scheduledEstimateGb,
+		newRecordGb,
+		projectedTotalGb,
+		remainingGb,
+		message: `Projected use: ${projectedTotalGb.toFixed(2)} GB / ${limitGb.toFixed(0)} GB (current ${currentUsedGb.toFixed(2)} GB + scheduled ${scheduledEstimateGb.toFixed(2)} GB + new ${newRecordGb.toFixed(2)} GB)`
+	};
+}
+
 async function loadAdminRecordings() {
 	if (currentRole !== 'admin') return;
 	try {
-		const res = await apiCall('/recordings');
-		if (!res.ok) throw new Error('Failed to load recordings');
-		let recordings = await res.json();
+		const [recordingsRes, r2UsageRes] = await Promise.all([
+			apiCall('/recordings'),
+			fetchR2Usage()
+		]);
+
+		if (!recordingsRes.ok) throw new Error('Failed to load recordings');
+		let recordings = await recordingsRes.json();
 		recordings.sort((a,b) => new Date(b.startTime || b.start_time) - new Date(a.startTime || a.start_time));
+
+		const fileSizeMap = new Map();
+		for (const file of (r2UsageRes.files || [])) {
+			fileSizeMap.set(String(file.key), Number(file.size_bytes || 0));
+		}
 
 		const listEl = document.getElementById('admin-recordings-list');
 		if (!listEl) return; listEl.innerHTML = '';
@@ -1129,26 +1224,31 @@ async function loadAdminRecordings() {
 
 		recordings.forEach(rec => {
 			const status = (rec.status || '').toString().toLowerCase();
+			const recordId = String(rec.id || rec.jobId || '');
+			const exactSizeBytes = recordId ? (fileSizeMap.get(recordId) ?? 0) : 0;
+			const fileSize = exactSizeBytes || Number(rec.file_size || rec.fileSize || 0) || 0;
 			
 			const isR2Deleted = status === 'deleted' || status === 'removed' || rec.deleted === true || rec.isDeleted === true;
 			const hideDeleteBtn = isR2Deleted || ['canceled', 'cancelled', 'uploading', 'clipping', 'rendering'].includes(status);
 			const canWatch = status === 'done' && !hideDeleteBtn;
 
 			const div = document.createElement('div');
-			div.className = 'py-3 flex justify-between items-center';
-			const watchBtnHtml = canWatch ? `<a href="#" onclick="watchRecording('${rec.id || rec.jobId}'); return false;" class="ml-2 inline-flex items-center px-2.5 py-1.5 border border-blue-300 shadow-sm text-xs font-medium rounded text-blue-700 bg-white hover:bg-blue-50">Watch</a>` : '';
-			const deleteBtnHtml = hideDeleteBtn ? '' : `<button class="ml-2 inline-flex items-center px-2.5 py-1.5 border border-red-300 shadow-sm text-xs font-medium rounded text-red-700 bg-white hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500" onclick="window.deleteRecording('${rec.id || rec.jobId}')">Delete</button>`;
-			const eraseBtnHtml = isR2Deleted ? `<button class="ml-2 inline-flex items-center px-2.5 py-1.5 border border-gray-300 shadow-sm text-xs font-medium rounded text-gray-500 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-400" onclick="window.eraseRecord('${rec.id || rec.jobId}')">Erase Record</button>` : '';
+			div.className = 'admin-recording-row py-3 flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-center';
+			const watchBtnHtml = canWatch ? `<a href="#" onclick="watchRecording('${rec.id || rec.jobId}'); return false;" class="action-watch admin-action-btn inline-flex items-center justify-center px-2.5 py-1.5 border border-blue-300 shadow-sm text-xs font-medium rounded text-blue-700 bg-white hover:bg-blue-50">Watch</a>` : '';
+			const deleteBtnHtml = hideDeleteBtn ? '' : `<button class="action-delete admin-action-btn inline-flex items-center justify-center px-2.5 py-1.5 border border-red-300 shadow-sm text-xs font-medium rounded text-red-700 bg-white hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500" onclick="window.deleteRecording('${rec.id || rec.jobId}')">Delete</button>`;
+			const eraseBtnHtml = isR2Deleted ? `<button class="action-erase admin-action-btn inline-flex items-center justify-center px-2.5 py-1.5 border border-gray-300 shadow-sm text-xs font-medium rounded text-gray-500 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-400" onclick="window.eraseRecord('${rec.id || rec.jobId}')">Erase</button>` : '';
+			const recordingName = rec.recordingName || rec.recording_name || '';
+			const displayName = fileSize > 0 ? `${recordingName} · ${formatStorageSize(fileSize)}` : recordingName;
 			div.innerHTML = `
-				<div class="flex-1 min-w-0 pr-4">
+				<div class="admin-recording-info flex-1 min-w-0 pr-0 sm:pr-4">
 					<p class="text-sm font-medium text-gray-900 truncate">
-						${escapeHtml(rec.recordingName || rec.recording_name || '')}
+						${escapeHtml(displayName)}
 						${rec.job_type === 'clip' ? '<span class="ml-1.5 badge badge-clip">Buffer Clip</span>' : ''}
 					</p>
 					<p class="text-xs text-gray-500 mt-1">ID: ${rec.id || rec.jobId} &bull; ${escapeHtml(rec.status || '')}</p>
 					<p class="text-xs text-gray-500 mt-1">Downloads: ${escapeHtml(String(rec.download_count || rec.downloadCount || 0))}</p>
 				</div>
-				<div class="recording-actions w-full sm:w-auto flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:flex-shrink-0">
+				<div class="recording-actions admin-actions w-full sm:w-auto flex flex-row flex-wrap items-center gap-2 sm:flex-shrink-0">
 					${watchBtnHtml}${deleteBtnHtml}${eraseBtnHtml}
 				</div>
 			`;
@@ -1161,17 +1261,27 @@ async function loadAdminRecordings() {
 	}
 }
 
-function updateAdminStats(logs) {
-	apiCall('/recordings').then(res => res.json()).then(recordings => {
+async function updateAdminStats(logs) {
+	try {
+		const [recordingsRes, r2Usage] = await Promise.all([
+			apiCall('/recordings'),
+			fetchR2Usage()
+		]);
+		if (!recordingsRes.ok) throw new Error('Failed to fetch recordings');
+		const recordings = await recordingsRes.json();
 		const total = recordings.length || 0;
 		const currentMonth = new Date().getMonth();
 		const currentYear = new Date().getFullYear();
 		const thisMonth = recordings.filter(r => { const d = new Date(r.startTime || r.start_time || r.created_at); return d.getMonth() === currentMonth && d.getFullYear() === currentYear; }).length;
 		const active = recordings.filter(r => ['recording','pending','uploading'].includes(((r.status||'')+"").toLowerCase())).length;
+		const storageBytes = Number(r2Usage.total_bytes || 0) || 0;
 		const elTotal = document.getElementById('stat-total'); if (elTotal) elTotal.textContent = total;
+		const elStorage = document.getElementById('stat-storage'); if (elStorage) elStorage.textContent = formatStorageSize(storageBytes);
 		const elMonth = document.getElementById('stat-month'); if (elMonth) elMonth.textContent = thisMonth;
 		const elActive = document.getElementById('stat-active'); if (elActive) elActive.textContent = active > 0 ? active + ' Job(s)' : 'None';
-	}).catch(e => console.error('Stats error', e));
+	} catch (e) {
+		console.error('Stats error', e);
+	}
 }
 
 window.deleteRecording = async function(id) {
@@ -1243,8 +1353,13 @@ window.downloadRecording = async function(id, suggestedName) {
     }
 };
 
+const SHARE_PW = "c2JjYw";
+
 window.copyShareLink = function(el, name) {
-    const url = `https://recordsb.github.io/cc/clip.html#${name}`;
+    let url = `https://recordsb.github.io/cc/clip.html#${name}`;
+    if (SHARE_PW) {
+        url += `?pw=${encodeURIComponent(SHARE_PW)}`;
+    }
     navigator.clipboard.writeText(url).then(() => {
         showTooltip(el, 'Share Link Copied!');
     }).catch(err => {
@@ -1356,6 +1471,10 @@ function showTooltip(el, message) {
     if (tooltip._hideTimeout) clearTimeout(tooltip._hideTimeout);
     tooltip._hideTimeout = setTimeout(() => {
         tooltip.style.opacity = '0';
+        if (tooltip._cleanupListeners) {
+            tooltip._cleanupListeners();
+            tooltip._cleanupListeners = null;
+        }
     }, 2000);
 }
 
