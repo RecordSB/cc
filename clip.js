@@ -1,8 +1,60 @@
-const WORKER_URL = "https://church-recorder-worker.tarstco.workers.dev";
+// Helper functions for base64 encoding/decoding of stored password
 let currentPassword = null;
+const WORKER_URL = "https://church-recorder-worker.tarstco.workers.dev"
+function encodePassword(pw) {
+    if (!pw) return '';
+    try { return btoa(encodeURIComponent(pw)); } catch (e) { return pw; }
+}
+function decodePassword(encoded) {
+    if (!encoded) return '';
+    try { return decodeURIComponent(atob(encoded)); } catch (e) { return encoded; }
+}
 
 document.addEventListener("DOMContentLoaded", async () => {
-    const savedPassword = sessionStorage.getItem('recordsb_password');
+    // Check for ?pw= in search query parameters
+    const urlParams = new URLSearchParams(window.location.search);
+    const pwParam = urlParams.get('pw');
+    if (pwParam) {
+        try {
+            const decodedParamPw = decodePassword(pwParam);
+            if (decodedParamPw) {
+                localStorage.setItem('recordsb_password', pwParam);
+                sessionStorage.setItem('recordsb_password', pwParam);
+                // Clean up URL query parameter without reloading page
+                const cleanUrl = window.location.protocol + "//" + window.location.host + window.location.pathname + window.location.hash;
+                window.history.replaceState({}, document.title, cleanUrl);
+            }
+        } catch (e) {
+            console.error("Failed to process pw URL parameter:", e);
+        }
+    }
+
+    // Also check for ?pw= embedded inside the URL hash (e.g. #filename?pw=...)
+    // This is how share links from script.js are structured.
+    const hashStr = window.location.hash ? window.location.hash.substring(1) : '';
+    if (hashStr.includes('?')) {
+        const hashQuery = hashStr.split('?')[1];
+        const hashParams = new URLSearchParams(hashQuery);
+        const hashPw = hashParams.get('pw');
+        if (hashPw) {
+            try {
+                const decodedHashPw = decodePassword(hashPw);
+                if (decodedHashPw) {
+                    localStorage.setItem('recordsb_password', hashPw);
+                    sessionStorage.setItem('recordsb_password', hashPw);
+                    // Clean up the ?pw= from the hash without reloading
+                    const cleanHash = hashStr.split('?')[0];
+                    const cleanUrl = window.location.protocol + '//' + window.location.host + window.location.pathname + '#' + cleanHash;
+                    window.history.replaceState({}, document.title, cleanUrl);
+                }
+            } catch (e) {
+                console.error('Failed to process pw hash parameter:', e);
+            }
+        }
+    }
+
+    const rawSaved = localStorage.getItem('recordsb_password') || sessionStorage.getItem('recordsb_password');
+    const savedPassword = decodePassword(rawSaved);
     if (savedPassword) {
         currentPassword = savedPassword;
         document.getElementById('login-screen-clip').classList.add('hidden');
@@ -60,7 +112,9 @@ async function handleLogin(e) {
         }
         if (!recRes.ok) throw new Error("Failed to authenticate.");
 
-        sessionStorage.setItem('recordsb_password', pwdInput);
+        const encodedPw = encodePassword(pwdInput);
+        localStorage.setItem('recordsb_password', encodedPw);
+        sessionStorage.setItem('recordsb_password', encodedPw);
         document.getElementById('login-screen-clip').classList.add('hidden');
         document.getElementById('clip-app-wrapper').classList.remove('hidden');
         await loadClipByHash();
@@ -79,8 +133,13 @@ async function handleLogin(e) {
 }
 
 async function loadClipByHash() {
-    const hash = window.location.hash ? window.location.hash.substring(1) : '';
-    const decodedHash = decodeURIComponent(hash).trim();
+    let rawHash = window.location.hash ? window.location.hash.substring(1) : '';
+    // If ?pw= was part of the hash or attached to it, split on '?'
+    if (rawHash.includes('?')) {
+        const parts = rawHash.split('?');
+        rawHash = parts[0];
+    }
+    const decodedHash = decodeURIComponent(rawHash).trim();
 
     const loadingEl = document.getElementById('clip-loading');
     const errorCard = document.getElementById('clip-error-card');
@@ -104,6 +163,7 @@ async function loadClipByHash() {
         const res = await apiCall("/recordings");
         if (res.status === 401) {
             currentPassword = null;
+            localStorage.removeItem('recordsb_password');
             sessionStorage.removeItem('recordsb_password');
             if (loadingEl) loadingEl.classList.add('hidden');
             document.getElementById('clip-app-wrapper').classList.add('hidden');
@@ -287,8 +347,13 @@ window.downloadRecording = async function(btnEl, id, suggestedName) {
     }
 };
 
+const SHARE_PW = "c2JjYw";
+
 window.copyShareLink = function(el, name) {
-    const url = `https://recordsb.github.io/cc/clip.html#${name}`;
+    let url = `https://recordsb.github.io/cc/clip.html#${name}`;
+    if (SHARE_PW) {
+        url += `?pw=${encodeURIComponent(SHARE_PW)}`;
+    }
     navigator.clipboard.writeText(url).then(() => {
         showTooltip(el, 'Share Link Copied!');
     }).catch(err => {
@@ -407,5 +472,5 @@ function showTooltip(el, message) {
 
 function escapeHtml(unsafe) {
     if (unsafe === null || unsafe === undefined) return '';
-    return unsafe.toString().replace(/&/g, '&').replace(/</g, '<').replace(/>/g, '>').replace(/"/g, '"').replace(/'/g, '&#039;');
+    return unsafe.toString().replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
 }
