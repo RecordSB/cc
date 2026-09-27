@@ -1,6 +1,22 @@
 // Helper functions for base64 encoding/decoding of stored password
 let currentPassword = null;
 const WORKER_URL = "https://church-recorder-worker.tarstco.workers.dev"
+const LOCK_KEY = 'recordsb_lockout_until';
+
+function getLockoutUntil() {
+    return parseInt(localStorage.getItem(LOCK_KEY) || '0', 10) || 0;
+}
+
+function isLockedOut() {
+    const until = getLockoutUntil();
+    if (!until) return false;
+    if (Date.now() >= until) {
+        localStorage.removeItem(LOCK_KEY);
+        return false;
+    }
+    return true;
+}
+
 function encodePassword(pw) {
     if (!pw) return '';
     try { return btoa(encodeURIComponent(pw)); } catch (e) { return pw; }
@@ -11,6 +27,11 @@ function decodePassword(encoded) {
 }
 
 document.addEventListener("DOMContentLoaded", async () => {
+    if (isLockedOut()) {
+        window.location.replace('/index.html');
+        return;
+    }
+
     // Check for ?pw= in search query parameters
     const urlParams = new URLSearchParams(window.location.search);
     const pwParam = urlParams.get('pw');
