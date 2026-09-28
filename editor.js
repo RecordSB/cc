@@ -12,11 +12,22 @@ let isDragging = null; // 'in' | 'out' | 'seek' | null
 let renderJobId = null;
 let renderPollInterval = null;
 
+// Helper functions for base64 encoding/decoding of stored password
+function encodePassword(pw) {
+    if (!pw) return '';
+    try { return btoa(encodeURIComponent(pw)); } catch (e) { return pw; }
+}
+function decodePassword(encoded) {
+    if (!encoded) return '';
+    try { return decodeURIComponent(atob(encoded)); } catch (e) { return encoded; }
+}
+
 // ==========================================
 // Auth
 // ==========================================
 function checkAuth() {
-    const saved = sessionStorage.getItem('recordsb_password');
+    const rawSaved = localStorage.getItem('recordsb_password');
+    const saved = decodePassword(rawSaved);
     if (!saved) {
         window.location.href = 'index.html';
         return false;
@@ -35,7 +46,7 @@ async function apiCall(endpoint, method = 'GET', body = null) {
     if (body) opts.body = JSON.stringify(body);
     const res = await fetch(`${WORKER_URL}${endpoint}`, opts);
     if (res.status === 401) {
-        sessionStorage.removeItem('recordsb_password');
+        localStorage.removeItem('recordsb_password');
         window.location.href = 'index.html';
         throw new Error('Session expired');
     }
