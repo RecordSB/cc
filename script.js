@@ -109,8 +109,8 @@ document.addEventListener("DOMContentLoaded", () => {
 		showLockoutScreen(lockoutRemainingMs());
 		return;
 	}
-	// Attempt silent auto-login from local/session storage before showing login screen
-	const rawSaved = localStorage.getItem('recordsb_password') || sessionStorage.getItem('recordsb_password');
+	// Attempt silent auto-login from local storage before showing login screen.
+	const rawSaved = localStorage.getItem('recordsb_password');
 	const savedPassword = decodePassword(rawSaved);
 	if (savedPassword) {
 		(async () => {
@@ -128,7 +128,6 @@ document.addEventListener("DOMContentLoaded", () => {
 				// Saved password is stale or server unreachable — fall through to login screen
 				currentPassword = null;
 				localStorage.removeItem('recordsb_password');
-				sessionStorage.removeItem('recordsb_password');
 			}
 		})();
 	}
@@ -311,10 +310,9 @@ async function handleLogin(e) {
 		// successful authentication — reset local failed-attempts state
 		clearFailedAttempts();
 
-		// Persist password for the session and locally so editor.html, live.html, and clip.html don't require re-login
+		// Persist the password locally so editor.html, live.html, and clip.html don't require re-login.
 		const encodedPw = encodePassword(pwdInput);
 		localStorage.setItem('recordsb_password', encodedPw);
-		sessionStorage.setItem('recordsb_password', encodedPw);
 
 		showMainApp();
 
@@ -1356,7 +1354,7 @@ window.downloadRecording = async function(id, suggestedName) {
 const SHARE_PW = "c2JjYw";
 
 window.copyShareLink = function(el, name) {
-    let url = `https://recordsb.github.io/cc/clip.html#${name}`;
+    let url = `https://recordsb.github.io/cc/clip#${name}`;
     if (SHARE_PW) {
         url += `?pw=${encodeURIComponent(SHARE_PW)}`;
     }
