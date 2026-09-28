@@ -2,6 +2,20 @@
 let currentPassword = null;
 const WORKER_URL = "https://church-recorder-worker.tarstco.workers.dev"
 const LOCK_KEY = 'recordsb_lockout_until';
+const PASSWORD_STORAGE_KEY = 'recordsb_password';
+
+function getStoredPassword() {
+    const rawSaved = localStorage.getItem(PASSWORD_STORAGE_KEY);
+    return rawSaved ? decodePassword(rawSaved) : '';
+}
+
+function setStoredPassword(password) {
+    if (!password) {
+        localStorage.removeItem(PASSWORD_STORAGE_KEY);
+        return;
+    }
+    localStorage.setItem(PASSWORD_STORAGE_KEY, encodePassword(password));
+}
 
 function getLockoutUntil() {
     return parseInt(localStorage.getItem(LOCK_KEY) || '0', 10) || 0;
@@ -32,50 +46,52 @@ document.addEventListener("DOMContentLoaded", async () => {
         return;
     }
 
-    // Check for ?pw= in search query parameters
-    const urlParams = new URLSearchParams(window.location.search);
-    const pwParam = urlParams.get('pw');
-    if (pwParam) {
-        try {
-            const decodedParamPw = decodePassword(pwParam);
-            if (decodedParamPw) {
-                localStorage.setItem('recordsb_password', pwParam);
-                sessionStorage.setItem('recordsb_password', pwParam);
-                // Clean up URL query parameter without reloading page
-                const cleanUrl = window.location.protocol + "//" + window.location.host + window.location.pathname + window.location.hash;
-                window.history.replaceState({}, document.title, cleanUrl);
-            }
-        } catch (e) {
-            console.error("Failed to process pw URL parameter:", e);
-        }
-    }
+    const existingPassword = getStoredPassword();
 
-    // Also check for ?pw= embedded inside the URL hash (e.g. #filename?pw=...)
-    // This is how share links from script.js are structured.
-    const hashStr = window.location.hash ? window.location.hash.substring(1) : '';
-    if (hashStr.includes('?')) {
-        const hashQuery = hashStr.split('?')[1];
-        const hashParams = new URLSearchParams(hashQuery);
-        const hashPw = hashParams.get('pw');
-        if (hashPw) {
+    // Ignore URL share passwords when the user is already signed in with a saved local password.
+    if (!existingPassword) {
+        // Check for ?pw= in search query parameters
+        const urlParams = new URLSearchParams(window.location.search);
+        const pwParam = urlParams.get('pw');
+        if (pwParam) {
             try {
-                const decodedHashPw = decodePassword(hashPw);
-                if (decodedHashPw) {
-                    localStorage.setItem('recordsb_password', hashPw);
-                    sessionStorage.setItem('recordsb_password', hashPw);
-                    // Clean up the ?pw= from the hash without reloading
-                    const cleanHash = hashStr.split('?')[0];
-                    const cleanUrl = window.location.protocol + '//' + window.location.host + window.location.pathname + '#' + cleanHash;
+                const decodedParamPw = decodePassword(pwParam);
+                if (decodedParamPw) {
+                    setStoredPassword(decodedParamPw);
+                    // Clean up URL query parameter without reloading page
+                    const cleanUrl = window.location.protocol + "//" + window.location.host + window.location.pathname + window.location.hash;
                     window.history.replaceState({}, document.title, cleanUrl);
                 }
             } catch (e) {
-                console.error('Failed to process pw hash parameter:', e);
+                console.error("Failed to process pw URL parameter:", e);
+            }
+        }
+
+        // Also check for ?pw= embedded inside the URL hash (e.g. #filename?pw=...)
+        // This is how share links from script.js are structured.
+        const hashStr = window.location.hash ? window.location.hash.substring(1) : '';
+        if (hashStr.includes('?')) {
+            const hashQuery = hashStr.split('?')[1];
+            const hashParams = new URLSearchParams(hashQuery);
+            const hashPw = hashParams.get('pw');
+            if (hashPw) {
+                try {
+                    const decodedHashPw = decodePassword(hashPw);
+                    if (decodedHashPw) {
+                        setStoredPassword(decodedHashPw);
+                        // Clean up the ?pw= from the hash without reloading
+                        const cleanHash = hashStr.split('?')[0];
+                        const cleanUrl = window.location.protocol + '//' + window.location.host + window.location.pathname + '#' + cleanHash;
+                        window.history.replaceState({}, document.title, cleanUrl);
+                    }
+                } catch (e) {
+                    console.error('Failed to process pw hash parameter:', e);
+                }
             }
         }
     }
 
-    const rawSaved = localStorage.getItem('recordsb_password') || sessionStorage.getItem('recordsb_password');
-    const savedPassword = decodePassword(rawSaved);
+    const savedPassword = getStoredPassword();
     if (savedPassword) {
         currentPassword = savedPassword;
         document.getElementById('login-screen-clip').classList.add('hidden');
@@ -134,8 +150,7 @@ async function handleLogin(e) {
         if (!recRes.ok) throw new Error("Failed to authenticate.");
 
         const encodedPw = encodePassword(pwdInput);
-        localStorage.setItem('recordsb_password', encodedPw);
-        sessionStorage.setItem('recordsb_password', encodedPw);
+        localStorage.setItem(PASSWORD_STORAGE_KEY, encodedPw);
         document.getElementById('login-screen-clip').classList.add('hidden');
         document.getElementById('clip-app-wrapper').classList.remove('hidden');
         await loadClipByHash();
@@ -184,8 +199,7 @@ async function loadClipByHash() {
         const res = await apiCall("/recordings");
         if (res.status === 401) {
             currentPassword = null;
-            localStorage.removeItem('recordsb_password');
-            sessionStorage.removeItem('recordsb_password');
+            localStorage.removeItem(PASSWORD_STORAGE_KEY);
             if (loadingEl) loadingEl.classList.add('hidden');
             document.getElementById('clip-app-wrapper').classList.add('hidden');
             document.getElementById('login-screen-clip').classList.remove('hidden');
