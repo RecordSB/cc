@@ -71,6 +71,7 @@
 .badge-buffer { background-color: #ede9fe; color: #5b21b6; }
 .badge-start { background-color: #dcfce7; color: #065f46; }
 .badge-rendering { background-color: #fef3c7; color: #92400e; }
+.badge-priority { background-color: #fef3c7; color: #92400e; }
 
 /* Responsive recording action buttons */
 .recording-actions {
