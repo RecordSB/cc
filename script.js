@@ -358,6 +358,39 @@ function showMainApp() {
 
 	switchTab('recordings');
 	loadRecordings();
+	loadPriorityAvailability();
+}
+
+// Only show the Priority checkbox when the server has the cloud backup configured
+async function loadPriorityAvailability() {
+	try {
+		const res = await apiCall("/health");
+		const data = await res.json();
+		const row = document.getElementById("priority-row");
+		if (row) row.classList.toggle("hidden", !data.priority_enabled);
+	} catch (e) { /* leave it hidden */ }
+}
+
+function priorityBadgeHtml(rec) {
+	return rec.priority ? '<span class="ml-1.5 badge badge-priority">Priority</span>' : '';
+}
+
+// One line explaining what the cloud backup did, plus whether a separate backup copy can be downloaded
+function cloudBackupInfo(rec) {
+	const c = rec.cloud || {};
+	const r = c.result || {};
+	let text = '', tone = 'text-gray-500';
+	if (c.state === 'resolved') {
+		if (r.verdict === 'pi_ok') { text = 'Cloud backup not needed: the Pi recorded everything'; tone = 'text-green-700'; }
+		else if (r.verdict === 'backup_uploaded') { text = `Cloud backup saved: ${r.reason || ''}`; tone = 'text-amber-700'; }
+		else if (r.verdict === 'backup_failed') { text = `Cloud backup failed: ${r.reason || ''}`; tone = 'text-red-600'; }
+		else if (r.verdict === 'cancelled') { text = 'Cloud backup cancelled'; }
+	} else if (c.state === 'schedule_failed') { text = `Cloud backup couldn't be scheduled: ${c.error || ''}`; tone = 'text-red-600'; }
+	else if (c.state === 'no_result') { text = c.error || 'Cloud backup never reported back'; tone = 'text-red-600'; }
+	else if (c.state === 'scheduled') { text = 'Cloud backup scheduled'; }
+	// A separate "Backup" button only when the backup isn't already the main file
+	const hasSeparateBackup = !!rec.backup_key && rec.r2_key !== rec.backup_key && rec.status !== 'deleted';
+	return { html: text ? `<p class="text-xs ${tone} mt-1">${escapeHtml(text)}</p>` : '', hasSeparateBackup };
 }
 
 function switchTab(tabId) {
@@ -629,11 +662,13 @@ async function handleScheduleRecording(e) {
 		if (new Date(startTime) < new Date()) return showScheduleError("Start time cannot be in the past.");
 	}
 
+	const priorityEl = document.getElementById("priority");
 	const payload = {
 		session_name: sessionName.trim(),
 		recording_name: recordingName.trim(),
 		start_time: startTime,
-		duration_minutes: duration
+		duration_minutes: duration,
+		priority: !!(priorityEl && priorityEl.checked)
 	};
 
 	const submitBtn = document.getElementById("schedule-submit");
@@ -847,7 +882,10 @@ function renderActiveStatusCards(recordings) {
 		const progressContainer = node.querySelector('.status-progress-container');
 		if (progressContainer) progressContainer.classList.add('hidden');
 
-		if (nameEl) nameEl.textContent = rec.recordingName || rec.recording_name || '';
+		if (nameEl) {
+			nameEl.textContent = rec.recordingName || rec.recording_name || '';
+			if (rec.priority) nameEl.insertAdjacentHTML('beforeend', priorityBadgeHtml(rec));
+		}
 		const status = ((rec.status||'')+"").toLowerCase();
 
 		// Set visuals based on status
@@ -999,6 +1037,14 @@ async function loadRecordings() {
 					<a href="#" onclick="downloadRecording('${id}', '${escapeHtml(recName)}'); return false;" class="action-download inline-flex items-center justify-center px-3 py-1.5 border border-transparent text-xs font-medium rounded shadow-sm text-white bg-blue-600 hover:bg-blue-700">Download</a>
 				`;
 			}
+			const cloud = cloudBackupInfo(rec);
+			if (cloud.hasSeparateBackup) {
+				const bid = `${rec.id || rec.jobId}_backup`;
+				actionButtonsHtml += `
+					<a href="#" onclick="downloadRecording('${bid}'); return false;" title="The cloud backup copy of this recording" class="action-download inline-flex items-center justify-center px-3 py-1.5 border border-amber-300 text-xs font-medium rounded shadow-sm text-amber-800 bg-white hover:bg-amber-50">Backup</a>
+				`;
+			}
+			const warningHtml = rec.warning ? `<p class="text-xs text-amber-700 mt-1">${escapeHtml(rec.warning)}</p>` : '';
 
 			const createdAt = rec.created_at || rec.startTime || rec.start_time;
 			let autodeleteHtml = '';
@@ -1033,6 +1079,7 @@ async function loadRecordings() {
 					<h4 class="text-sm font-medium text-gray-900 truncate">
 						${escapeHtml(rec.recording_name || rec.recordingName || '')}
 						${rec.job_type === 'clip' ? '<span class="ml-1.5 badge badge-clip">Buffer Clip</span>' : ''}
+						${priorityBadgeHtml(rec)}
 					</h4>
 					<div class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-gray-500">
 						<span>${createdAt ? new Date(createdAt).toLocaleString(undefined, {month:'short', day:'numeric', hour:'numeric', minute:'2-digit'}) : ''}</span>
@@ -1043,6 +1090,7 @@ async function loadRecordings() {
 						${autodeleteHtml}
 					</div>
 					<p class="text-xs text-gray-500 mt-1">Downloads: ${escapeHtml(String(rec.download_count || rec.downloadCount || 0))}</p>
+					${warningHtml}${cloud.html}
 				</div>
 				<div class="recording-actions w-full sm:w-auto flex flex-row flex-wrap items-center gap-2 sm:flex-shrink-0">
 					${actionButtonsHtml}
@@ -1223,7 +1271,7 @@ async function loadAdminRecordings() {
 		recordings.forEach(rec => {
 			const status = (rec.status || '').toString().toLowerCase();
 			const recordId = String(rec.id || rec.jobId || '');
-			const exactSizeBytes = recordId ? (fileSizeMap.get(recordId) ?? 0) : 0;
+			const exactSizeBytes = recordId ? (fileSizeMap.get(String(rec.r2_key || recordId)) ?? 0) : 0;
 			const fileSize = exactSizeBytes || Number(rec.file_size || rec.fileSize || 0) || 0;
 			
 			const isR2Deleted = status === 'deleted' || status === 'removed' || rec.deleted === true || rec.isDeleted === true;
@@ -1242,9 +1290,11 @@ async function loadAdminRecordings() {
 					<p class="text-sm font-medium text-gray-900 truncate">
 						${escapeHtml(displayName)}
 						${rec.job_type === 'clip' ? '<span class="ml-1.5 badge badge-clip">Buffer Clip</span>' : ''}
+						${priorityBadgeHtml(rec)}
 					</p>
 					<p class="text-xs text-gray-500 mt-1">ID: ${rec.id || rec.jobId} &bull; ${escapeHtml(rec.status || '')}</p>
 					<p class="text-xs text-gray-500 mt-1">Downloads: ${escapeHtml(String(rec.download_count || rec.downloadCount || 0))}</p>
+					${cloudBackupInfo(rec).html}
 				</div>
 				<div class="recording-actions admin-actions w-full sm:w-auto flex flex-row flex-wrap items-center gap-2 sm:flex-shrink-0">
 					${watchBtnHtml}${deleteBtnHtml}${eraseBtnHtml}
