@@ -73,6 +73,15 @@
                             <label for="duration" class="block text-sm font-medium text-gray-700">Duration (Minutes) <span class="text-xs text-blue-600 font-normal ml-1"></span></label>
                             <input type="number" id="duration" placeholder="e.g. 60" min="1" required class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
                         </div>
+                        <div id="priority-row" class="md:col-span-2 hidden">
+                            <div class="flex items-start">
+                                <input id="priority" type="checkbox" class="mt-0.5 h-4 w-4 text-amber-600 focus:ring-amber-500 border-gray-300 rounded">
+                                <label for="priority" class="ml-2 block text-sm text-gray-900">
+                                    Priority
+                                    <span class="block text-xs text-gray-500">Also records in the cloud as a backup. It's only kept if the Pi's recording fails or comes up short.</span>
+                                </label>
+                            </div>
+                        </div>
                     </div>
                     <div id="schedule-error" class="hidden text-sm text-red-600 bg-red-50 p-3 rounded-md"></div>
                     <div class="flex justify-end pt-2">
