@@ -1275,14 +1275,15 @@ async function loadAdminRecordings() {
 			const fileSize = exactSizeBytes || Number(rec.file_size || rec.fileSize || 0) || 0;
 			
 			const isR2Deleted = status === 'deleted' || status === 'removed' || rec.deleted === true || rec.isDeleted === true;
-			const hideDeleteBtn = isR2Deleted || ['canceled', 'cancelled', 'uploading', 'clipping', 'rendering'].includes(status);
+			const canErase = isR2Deleted || ['canceled', 'cancelled'].includes(status);
+			const hideDeleteBtn = canErase || ['uploading', 'clipping', 'rendering'].includes(status);
 			const canWatch = status === 'done' && !hideDeleteBtn;
 
 			const div = document.createElement('div');
 			div.className = 'admin-recording-row py-3 flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-center';
 			const watchBtnHtml = canWatch ? `<a href="#" onclick="watchRecording('${rec.id || rec.jobId}'); return false;" class="action-watch admin-action-btn inline-flex items-center justify-center px-2.5 py-1.5 border border-blue-300 shadow-sm text-xs font-medium rounded text-blue-700 bg-white hover:bg-blue-50">Watch</a>` : '';
 			const deleteBtnHtml = hideDeleteBtn ? '' : `<button class="action-delete admin-action-btn inline-flex items-center justify-center px-2.5 py-1.5 border border-red-300 shadow-sm text-xs font-medium rounded text-red-700 bg-white hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500" onclick="window.deleteRecording('${rec.id || rec.jobId}')">Delete</button>`;
-			const eraseBtnHtml = isR2Deleted ? `<button class="action-erase admin-action-btn inline-flex items-center justify-center px-2.5 py-1.5 border border-gray-300 shadow-sm text-xs font-medium rounded text-gray-500 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-400" onclick="window.eraseRecord('${rec.id || rec.jobId}')">Erase</button>` : '';
+			const eraseBtnHtml = canErase ? `<button class="action-erase admin-action-btn inline-flex items-center justify-center px-2.5 py-1.5 border border-gray-300 shadow-sm text-xs font-medium rounded text-gray-500 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-400" onclick="window.eraseRecord('${rec.id || rec.jobId}')">Erase</button>` : '';
 			const recordingName = rec.recordingName || rec.recording_name || '';
 			const displayName = fileSize > 0 ? `${recordingName} · ${formatStorageSize(fileSize)}` : recordingName;
 			div.innerHTML = `
@@ -1342,10 +1343,13 @@ window.deleteRecording = async function(id) {
 };
 
 window.eraseRecord = async function(id) {
-    if (!confirm("This will permanently remove this record from the system log. The file is already deleted from storage. Continue?")) return;
+    if (!confirm("This will permanently erase this recording entry and delete any remaining files from storage. Continue?")) return;
     try {
         const res = await apiCall(`/recordings/${id}`, 'DELETE');
-        if (!res.ok) throw new Error('Erase failed');
+        if (!res.ok) {
+            const error = await res.json();
+            throw new Error(error.error || 'Erase failed');
+        }
         loadAdminRecordings();
         loadRecordings();
     } catch (e) { alert('Error erasing record: ' + e.message); }
