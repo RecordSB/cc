@@ -1401,13 +1401,15 @@ window.downloadRecording = async function(id, suggestedName) {
     }
 };
 
-const SHARE_PW = "c2JjYw";
-
 window.copyShareLink = function(el, name) {
-    let url = `https://recordsb.github.io/cc/clip#${name}`;
-    if (SHARE_PW) {
-        url += `?pw=${encodeURIComponent(SHARE_PW)}`;
+    const password = decodePassword(localStorage.getItem('recordsb_password'));
+    if (!password) {
+        showTooltip(el, 'Please log in before sharing.');
+        return;
     }
+    // User passwords are four characters; admin passwords end with -<user password>.
+    const encodedPassword = encodePassword(password.slice(-4));
+    const url = `https://recordsb.github.io/cc/clip.html#${name}?pw=${encodeURIComponent(encodedPassword)}`;
     navigator.clipboard.writeText(url).then(() => {
         showTooltip(el, 'Share Link Copied!');
     }).catch(err => {
