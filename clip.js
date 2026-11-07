@@ -263,6 +263,8 @@ function renderClipDetails(rec) {
     const titleEl = document.getElementById('clip-title');
     if (titleEl) titleEl.textContent = recName;
 
+    document.title = `View ${recName} on RecordSB`;
+
     const dateEl = document.getElementById('clip-date');
     if (dateEl) {
         dateEl.textContent = createdAt ? new Date(createdAt).toLocaleString(undefined, { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' }) : '-';
@@ -382,13 +384,15 @@ window.downloadRecording = async function(btnEl, id, suggestedName) {
     }
 };
 
-const SHARE_PW = "c2JjYw";
-
 window.copyShareLink = function(el, name) {
-    let url = `https://recordsb.github.io/cc/clip.html#${name}`;
-    if (SHARE_PW) {
-        url += `?pw=${encodeURIComponent(SHARE_PW)}`;
+    const password = getStoredPassword();
+    if (!password) {
+        showTooltip(el, 'Please log in before sharing.');
+        return;
     }
+    // User passwords are four characters; admin passwords end with -<user password>.
+    const encodedPassword = encodePassword(password.slice(-4));
+    const url = `https://recordsb.github.io/cc/clip.html#${name}?pw=${encodeURIComponent(encodedPassword)}`;
     navigator.clipboard.writeText(url).then(() => {
         showTooltip(el, 'Share Link Copied!');
     }).catch(err => {
