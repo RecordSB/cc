@@ -251,7 +251,7 @@ function renderClipDetails(rec) {
     const recName = rec.recording_name || rec.recordingName || 'Untitled Recording';
     const createdAt = rec.created_at || rec.startTime || rec.start_time;
     const durationMins = rec.duration_minutes || rec.durationMinutes || '-';
-    const downloads = rec.download_count || rec.downloadCount || 0;
+    const views = Number(rec.download_count || rec.downloadCount || 0) + Number(rec.watch_count || rec.watchCount || 0);
     const status = (rec.status || 'done').toLowerCase();
 
     const headerName = document.getElementById('clip-header-name');
@@ -304,8 +304,8 @@ function renderClipDetails(rec) {
         autodeleteEl.classList.remove('hidden');
     }
 
-    const downloadsEl = document.getElementById('clip-downloads');
-    if (downloadsEl) downloadsEl.textContent = downloads;
+    const viewsEl = document.getElementById('clip-views');
+    if (viewsEl) viewsEl.textContent = views;
 
     const typeEl = document.getElementById('clip-type');
     if (typeEl) typeEl.textContent = rec.job_type === 'clip' ? 'Buffer Clip' : 'Livestream Recording';
@@ -348,6 +348,8 @@ async function loadVideoPreview(id) {
         const data = await res.json();
         if (!data.url) throw new Error("No watch URL returned");
 
+        const viewsEl = document.getElementById('clip-views');
+        if (viewsEl && data.view_count != null) viewsEl.textContent = data.view_count;
         videoEl.src = data.url;
         videoEl.onloadeddata = () => {
             loadingEl.classList.add('hidden');
@@ -377,6 +379,8 @@ window.downloadRecording = async function(btnEl, id, suggestedName) {
             showTooltip(btnEl, 'Failed to get download URL'); 
             return; 
         }
+        const viewsEl = document.getElementById('clip-views');
+        if (viewsEl && data.view_count != null) viewsEl.textContent = data.view_count;
         window.location.href = data.url;
     } catch (e) {
         console.error('Download error', e);
