@@ -1089,7 +1089,7 @@ async function loadRecordings() {
 						<span class="badge badge-${(status||'')}">${escapeHtml(rec.status || '')}</span>
 						${autodeleteHtml}
 					</div>
-					<p class="text-xs text-gray-500 mt-1">Downloads: ${escapeHtml(String(rec.download_count || rec.downloadCount || 0))}</p>
+					<p class="text-xs text-gray-500 mt-1">Views: ${escapeHtml(String(Number(rec.download_count || rec.downloadCount || 0) + Number(rec.watch_count || rec.watchCount || 0)))}</p>
 					${warningHtml}${cloud.html}
 				</div>
 				<div class="recording-actions w-full sm:w-auto flex flex-row flex-wrap items-center gap-2 sm:flex-shrink-0">
@@ -1294,7 +1294,7 @@ async function loadAdminRecordings() {
 						${priorityBadgeHtml(rec)}
 					</p>
 					<p class="text-xs text-gray-500 mt-1">ID: ${rec.id || rec.jobId} &bull; ${escapeHtml(rec.status || '')}</p>
-					<p class="text-xs text-gray-500 mt-1">Downloads: ${escapeHtml(String(rec.download_count || rec.downloadCount || 0))}</p>
+					<p class="text-xs text-gray-500 mt-1">Views: ${escapeHtml(String(Number(rec.download_count || rec.downloadCount || 0) + Number(rec.watch_count || rec.watchCount || 0)))}</p>
 					${cloudBackupInfo(rec).html}
 				</div>
 				<div class="recording-actions admin-actions w-full sm:w-auto flex flex-row flex-wrap items-center gap-2 sm:flex-shrink-0">
@@ -1398,6 +1398,8 @@ window.downloadRecording = async function(id, suggestedName) {
         // Navigate to the presigned URL — R2 returns Content-Disposition: attachment
         // so the browser downloads the file without leaving the page, on all devices
         window.location.href = data.url;
+        loadRecordings();
+        if (currentRole === 'admin') loadAdminRecordings();
 
     } catch (e) {
         console.error('Download error', e);
@@ -1545,6 +1547,8 @@ window.watchRecording = async function(id) {
         const data = await res.json();
         if (!data.url) { alert('Failed to get watch URL'); return; }
         window.open(data.url, '_blank');
+        loadRecordings();
+        if (currentRole === 'admin') loadAdminRecordings();
     } catch (e) {
         console.error('Watch error', e);
         alert('Watch failed: ' + (e.message || e));
