@@ -5,27 +5,555 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Watch Live — RecordSB</title>
   <style>
-    html,body { height:100%; margin:0; background:#000; }
-    .wrap { height:100%; display:flex; flex-direction:column; }
-    .controls { position: absolute; top:12px; left:12px; z-index:20; }
-    iframe { width:100%; height:100vh; border:0; display:block; }
-  </style>
-</head>
-<!-- Google tag (gtag.js) -->
-<script async src="https://www.googletagmanager.com/gtag/js?id=G-238NMVY6RW"></script>
-<script>
-  window.dataLayer = window.dataLayer || [];
-  function gtag(){dataLayer.push(arguments);}
-  gtag('js', new Date());
+    :root { --accent:#ef4444; --fg:#fff; --muted:rgba(255,255,255,.65); --track:rgba(255,255,255,.18); --avail:rgba(255,255,255,.38); }
+    html,body { height:100%; margin:0; background:#000; color:var(--fg); font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; }
+    #stage { position:relative; height:100%; width:100%; overflow:hidden; background:#000; }
+    #video { width:100%; height:100%; display:block; background:#000; object-fit:contain; }
+    .back { position:absolute; top:12px; left:12px; z-index:30; color:#fff; text-decoration:underline; font-size:15px; text-shadow:0 1px 3px #000; }
+    #unmute { position:absolute; top:12px; right:12px; z-index:30; background:rgba(0,0,0,.6); color:#fff; border:1px solid rgba(255,255,255,.4); border-radius:999px; padding:8px 14px; font-size:14px; cursor:pointer; }
+    #toast { position:absolute; left:50%; top:56px; transform:translateX(-50%); z-index:30; background:rgba(20,20,20,.9); border:1px solid rgba(255,255,255,.2); padding:10px 16px; border-radius:10px; font-size:14px; max-width:calc(100% - 32px); text-align:center; opacity:0; pointer-events:none; transition:opacity .25s; }
+    #toast.show { opacity:1; pointer-events:auto; }
+    #toast a { color:#93c5fd; }
+    #spinner { position:absolute; left:50%; top:50%; width:44px; height:44px; margin:-22px 0 0 -22px; border:4px solid rgba(255,255,255,.25); border-top-color:#fff; border-radius:50%; animation:spin 0.9s linear infinite; z-index:20; display:none; }
+    #spinner.show { display:block; }
+    @keyframes spin { to { transform:rotate(360deg); } }
 
-  gtag('config', 'G-238NMVY6RW');
-</script>
+    #bar { position:absolute; left:0; right:0; bottom:0; z-index:25; padding:28px 16px calc(12px + env(safe-area-inset-bottom)); background:linear-gradient(transparent, rgba(0,0,0,.85)); transition:opacity .3s; }
+    #stage.idle #bar, #stage.idle .back, #stage.idle #unmute { opacity:0; pointer-events:none; }
+    #stage.idle { cursor:none; }
+
+    #scrub { position:relative; height:28px; cursor:pointer; touch-action:none; user-select:none; -webkit-user-select:none; }
+    #track { position:absolute; left:0; right:0; top:12px; height:5px; border-radius:3px; background:var(--track); overflow:hidden; }
+    #scrub:hover #track, #scrub.drag #track { top:11px; height:7px; }
+    .avail { position:absolute; top:0; bottom:0; background:var(--avail); }
+    #fill { position:absolute; left:0; top:0; bottom:0; background:var(--accent); width:100%; }
+    #knob { position:absolute; top:7px; width:15px; height:15px; margin-left:-7.5px; border-radius:50%; background:var(--accent); box-shadow:0 0 0 2px rgba(0,0,0,.4); left:100%; }
+    #tip { position:absolute; bottom:30px; transform:translateX(-50%); background:rgba(20,20,20,.95); border:1px solid rgba(255,255,255,.2); padding:4px 8px; border-radius:6px; font-size:13px; white-space:nowrap; display:none; font-variant-numeric:tabular-nums; }
+    #scrub.drag #tip, #scrub.hovering #tip { display:block; }
+    .edge-labels { display:flex; justify-content:space-between; font-size:11px; color:var(--muted); margin-top:-2px; font-variant-numeric:tabular-nums; }
+
+    .row { display:flex; align-items:center; gap:10px; margin-top:6px; flex-wrap:wrap; }
+    .btn { background:none; border:0; color:#fff; font-size:15px; padding:6px 8px; border-radius:6px; cursor:pointer; line-height:1; min-width:36px; min-height:36px; }
+    .btn:hover, .btn:focus-visible { background:rgba(255,255,255,.12); outline:none; }
+    .btn svg { width:22px; height:22px; fill:currentColor; display:block; margin:auto; }
+    #live { display:inline-flex; align-items:center; gap:6px; font-weight:700; font-size:13px; letter-spacing:.04em; padding:6px 10px; border-radius:999px; border:1px solid rgba(255,255,255,.35); background:transparent; color:var(--muted); cursor:pointer; min-height:32px; }
+    #live .dot { width:8px; height:8px; border-radius:50%; background:currentColor; }
+    #live.on { color:#fff; border-color:var(--accent); background:var(--accent); cursor:default; }
+    #clock { font-size:14px; font-variant-numeric:tabular-nums; color:#fff; }
+    #behind { font-size:13px; color:var(--muted); }
+    .spacer { flex:1; }
+    .jump { display:flex; align-items:center; gap:6px; }
+    .jump input { background:rgba(255,255,255,.1); color:#fff; border:1px solid rgba(255,255,255,.3); border-radius:6px; padding:5px 6px; font-size:14px; color-scheme:dark; }
+    .jump button { background:rgba(255,255,255,.15); color:#fff; border:0; border-radius:6px; padding:7px 10px; font-size:14px; cursor:pointer; }
+    @media (max-width:560px) { .jump label { display:none; } #behind { display:none; } .row { gap:4px; } }
+
+    #fallback { width:100%; height:100vh; border:0; display:block; }
+  </style>
+  <!-- Google tag (gtag.js) -->
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-238NMVY6RW"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag('js', new Date());
+    gtag('config', 'G-238NMVY6RW');
+  </script>
+  <script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.17/dist/hls.min.js"></script>
+</head>
 <body>
-  <div class="wrap">
-    <div class="controls">
-      <a href="index.html" style="margin-left:8px;color:#fff; text-decoration:underline;">Back</a>
+  <div id="stage">
+    <a href="index.html" class="back">Back</a>
+    <video id="video" playsinline muted autoplay></video>
+    <div id="spinner"></div>
+    <button id="unmute" hidden>🔇 Tap to unmute</button>
+    <div id="toast" role="status" aria-live="polite"></div>
+
+    <div id="bar">
+      <div id="scrub" role="slider" tabindex="0" aria-label="Timeline — drag left to go back in time">
+        <div id="track"><div id="fill"></div></div>
+        <div id="knob"></div>
+        <div id="tip"></div>
+      </div>
+      <div class="edge-labels"><span id="edge-start"></span><span>Now</span></div>
+      <div class="row">
+        <button class="btn" id="play" aria-label="Pause"></button>
+        <button class="btn" id="back30" aria-label="Back 30 seconds" title="Back 30s">−30s</button>
+        <button class="btn" id="fwd30" aria-label="Forward 30 seconds" title="Forward 30s">+30s</button>
+        <button id="live" aria-label="Go to live"><span class="dot"></span>LIVE</button>
+        <span id="clock"></span>
+        <span id="behind"></span>
+        <span class="spacer"></span>
+        <form class="jump" id="jump">
+          <label for="jump-time" style="font-size:13px;color:var(--muted)">Jump to</label>
+          <input type="time" id="jump-time" required>
+          <button type="submit">Go</button>
+        </form>
+        <button class="btn" id="mute" aria-label="Unmute"></button>
+        <button class="btn" id="fs" aria-label="Fullscreen"><svg viewBox="0 0 24 24"><path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/></svg></button>
+      </div>
     </div>
-    <iframe id="live-iframe" src="https://www.christianworldmedia.com/3692-3634-/embed-html5/f7/livestream.html" scrolling="no" frameborder="0" allowtransparency="true" webkitallowfullscreen mozallowfullscreen allowfullscreen allow="autoplay; fullscreen"></iframe>
   </div>
+
+<script>
+(() => {
+  // ---------------------------------------------------------------------------
+  // Config
+  // ---------------------------------------------------------------------------
+  const WORKER_URL = "https://church-recorder-worker.tarstco.workers.dev";
+  const LIVE_SRC = "https://f-il-edge-97.christianworldmedia.com/stbernadette/mp4:stbernadette/playlist.m3u8";
+  const FALLBACK_EMBED = "https://www.christianworldmedia.com/3692-3634-/embed-html5/f7/livestream.html";
+  const LIVE_WINDOW_MS = 30 * 1000;      // anything newer than this plays from the live stream
+  const PLAYLIST_FRESH_MS = 60 * 1000;   // reuse a fetched rewind playlist for this long
+  const CAUGHT_UP_MS = 30 * 1000;        // at the end of the rewind buffer, go live if less new footage than this
+
+  const ICON_PLAY = '<svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>';
+  const ICON_PAUSE = '<svg viewBox="0 0 24 24"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>';
+  const ICON_MUTED = '<svg viewBox="0 0 24 24"><path d="M16.5 12A4.5 4.5 0 0014 7.97v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51A8.8 8.8 0 0021 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06a8.99 8.99 0 003.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z"/></svg>';
+  const ICON_SOUND = '<svg viewBox="0 0 24 24"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3A4.5 4.5 0 0014 7.97v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/></svg>';
+
+  function decodePassword(encoded) {
+    if (!encoded) return '';
+    try { return decodeURIComponent(atob(encoded)); } catch (e) { return encoded; }
+  }
+  let password = '';
+  try { password = decodePassword(localStorage.getItem('recordsb_password')); } catch (e) {}
+
+  const $ = id => document.getElementById(id);
+  const stage = $('stage'), video = $('video'), scrub = $('scrub'), fill = $('fill'), knob = $('knob'),
+        tip = $('tip'), track = $('track'), liveBtn = $('live'), clock = $('clock'), behind = $('behind'),
+        spinner = $('spinner'), toastEl = $('toast'), unmuteBtn = $('unmute');
+
+  // ---------------------------------------------------------------------------
+  // Browsers without MediaSource (iOS < 17.1): keep the original embed.
+  // ---------------------------------------------------------------------------
+  if (!window.Hls || !Hls.isSupported()) {
+    stage.innerHTML = '<a href="index.html" class="back">Back</a>' +
+      '<iframe id="fallback" src="' + FALLBACK_EMBED + '" scrolling="no" frameborder="0" allowtransparency="true" allowfullscreen allow="autoplay; fullscreen"></iframe>';
+    return;
+  }
+
+  // ---------------------------------------------------------------------------
+  // State
+  // ---------------------------------------------------------------------------
+  let hls = null;
+  let mode = null;                 // 'live' | 'buffer'
+  let bufferStart = null;          // ms epoch of oldest rewindable footage (from /buffer/status)
+  let rewind = null;               // { fetchedAt, blobUrl, frags:[{start,pdt,dur}], ranges:[[a,b]], endT }
+  let rewindFetch = null;          // in-flight playlist promise
+  let dragging = false, dragT = null;
+  let pendingSeekT = null;         // wall-clock target while a source is loading
+  let retriedAt = 0;
+  let wokeFromIdleAt = 0;
+  let mediaErrors = [];
+
+  const fmtTime = ms => new Date(ms).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', second: '2-digit' });
+  const fmtShort = ms => new Date(ms).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  function fmtAgo(ms) {
+    const s = Math.round(ms / 1000);
+    if (s < 60) return s + 's behind live';
+    const m = Math.floor(s / 60), h = Math.floor(m / 60);
+    return h ? `${h}h ${m % 60}m behind live` : `${m}m behind live`;
+  }
+
+  let toastTimer = null;
+  function toast(html, ms = 4000) {
+    toastEl.innerHTML = html;
+    toastEl.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => toastEl.classList.remove('show'), ms);
+  }
+  const canRewind = () => !!password && bufferStart !== null;
+
+  // ---------------------------------------------------------------------------
+  // Buffer bounds (public, tiny) — no video is fetched from the Pi until someone scrolls back
+  // ---------------------------------------------------------------------------
+  async function refreshBufferStatus() {
+    try {
+      const r = await fetch(WORKER_URL + '/buffer/status');
+      const d = await r.json();
+      const t = d.oldest_segment_ts ? Date.parse(d.oldest_segment_ts) : NaN;
+      bufferStart = (isFinite(t) && (d.hours_available || 0) > 0) ? t : null;
+    } catch (e) { bufferStart = null; }
+    $('edge-start').textContent = bufferStart ? fmtShort(bufferStart) : '';
+  }
+
+  // ---------------------------------------------------------------------------
+  // Rewind playlist: fetched with the password, turned into a blob URL for hls.js.
+  // ---------------------------------------------------------------------------
+  function parsePlaylist(text) {
+    const frags = [];
+    let pdt = null, dur = null, start = 0;
+    for (const line of text.split('\n')) {
+      if (line.startsWith('#EXT-X-PROGRAM-DATE-TIME:')) pdt = Date.parse(line.slice(25));
+      else if (line.startsWith('#EXTINF:')) dur = parseFloat(line.slice(8));
+      else if (line && !line.startsWith('#') && dur !== null) {
+        frags.push({ start, pdt, dur });
+        start += dur;
+        pdt = pdt !== null ? pdt + dur * 1000 : null;   // PDT tag only on the first slice of each segment
+        dur = null;
+      }
+    }
+    const ranges = [];
+    for (const f of frags) {
+      const a = f.pdt, b = f.pdt + f.dur * 1000;
+      const last = ranges[ranges.length - 1];
+      if (last && a - last[1] < 5000) last[1] = Math.max(last[1], b); else ranges.push([a, b]);
+    }
+    return { frags, ranges, endT: ranges.length ? ranges[ranges.length - 1][1] : null };
+  }
+
+  function loadRewindPlaylist(force) {
+    if (!force && rewind && Date.now() - rewind.fetchedAt < PLAYLIST_FRESH_MS) return Promise.resolve(rewind);
+    if (rewindFetch) return rewindFetch;
+    rewindFetch = (async () => {
+      const r = await fetch(WORKER_URL + '/buffer/hls.m3u8', { headers: { 'X-Password': password } });
+      if (r.status === 401) throw Object.assign(new Error('auth'), { code: 401 });
+      if (!r.ok) throw Object.assign(new Error('Recorder returned ' + r.status), { code: r.status });
+      let text = await r.text();
+      text = text.replace(/^seg\//gm, WORKER_URL + '/buffer/seg/');   // blob URLs can't resolve relative paths
+      const parsed = parsePlaylist(text);
+      if (!parsed.frags.length) throw new Error('empty');
+      if (rewind && rewind.blobUrl) URL.revokeObjectURL(rewind.blobUrl);
+      rewind = Object.assign(parsed, {
+        fetchedAt: Date.now(),
+        blobUrl: URL.createObjectURL(new Blob([text], { type: 'application/vnd.apple.mpegurl' })),
+      });
+      renderRanges();
+      return rewind;
+    })().finally(() => { rewindFetch = null; });
+    return rewindFetch;
+  }
+
+  // Wall-clock <-> media time inside the rewind playlist (prefers hls.js's own fragment list).
+  function rewindFrags() {
+    const d = hls && mode === 'buffer' && hls.levels && hls.levels[0] && hls.levels[0].details;
+    if (d && d.fragments && d.fragments.length && d.fragments[0].programDateTime) {
+      return d.fragments.map(f => ({ start: f.start, pdt: f.programDateTime, dur: f.duration }));
+    }
+    return rewind ? rewind.frags : [];
+  }
+  function timeToPos(t) {
+    const frags = rewindFrags();
+    if (!frags.length) return 0;
+    if (t <= frags[0].pdt) return frags[0].start;
+    for (const f of frags) {
+      if (t < f.pdt) return f.start;                                   // in a gap: next available footage
+      if (t < f.pdt + f.dur * 1000) return f.start + (t - f.pdt) / 1000;
+    }
+    const last = frags[frags.length - 1];
+    return Math.max(0, last.start + last.dur - 10);                    // past the end: latest footage
+  }
+  function posToTime(pos) {
+    const frags = rewindFrags();
+    let lo = 0, hi = frags.length - 1;
+    if (hi < 0) return null;
+    while (lo < hi) { const mid = (lo + hi + 1) >> 1; if (frags[mid].start <= pos) lo = mid; else hi = mid - 1; }
+    const f = frags[lo];
+    return f.pdt + Math.min(Math.max(pos - f.start, 0), f.dur) * 1000;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Player
+  // ---------------------------------------------------------------------------
+  function newHls(nextMode) {
+    if (hls) { hls.destroy(); hls = null; }
+    mode = nextMode;
+    const cfg = nextMode === 'live'
+      ? { lowLatencyMode: false, liveSyncDurationCount: 2 }
+      : {
+          autoStartLoad: false,
+          maxBufferLength: 30, maxMaxBufferLength: 60, backBufferLength: 30,   // keep Pi upload ≈ playback rate
+          xhrSetup: (xhr, url) => { if (url.startsWith(WORKER_URL)) xhr.setRequestHeader('X-Password', password); },
+        };
+    hls = new Hls(cfg);
+    hls.on(Hls.Events.ERROR, onHlsError);
+    hls.attachMedia(video);
+    return hls;
+  }
+
+  function playVideo() {
+    const p = video.play();
+    if (p && p.catch) p.catch(() => {
+      if (!video.muted) { video.muted = true; video.play().catch(() => {}); }
+    });
+  }
+
+  function goLive(message) {
+    pendingSeekT = null;
+    if (mode === 'live' && hls) {
+      if (hls.liveSyncPosition) video.currentTime = hls.liveSyncPosition;
+      playVideo();
+    } else {
+      spinner.classList.add('show');
+      const h = newHls('live');
+      h.loadSource(LIVE_SRC);
+      h.once(Hls.Events.MANIFEST_PARSED, playVideo);
+    }
+    if (message) toast(message);
+  }
+
+  async function goBuffer(t, forceNew) {
+    pendingSeekT = t;
+    spinner.classList.add('show');
+    let pl;
+    try {
+      const wasFresh = rewind && Date.now() - rewind.fetchedAt < PLAYLIST_FRESH_MS;
+      pl = await loadRewindPlaylist(false);
+      if (pendingSeekT !== t) return;                 // a newer seek happened meanwhile
+      if (!forceNew && mode === 'buffer' && hls && wasFresh && t <= pl.endT) {
+        video.currentTime = timeToPos(t);
+        playVideo();
+        return;
+      }
+    } catch (e) {
+      spinner.classList.remove('show');
+      if (e.code === 401) toast('Your login has expired. <a href="index.html">Log in again</a> to rewind.', 7000);
+      else toast("Couldn't reach the recorder, so rewind isn't available right now.");
+      if (mode !== 'live') goLive();
+      return;
+    }
+    const h = newHls('buffer');
+    h.once(Hls.Events.LEVEL_LOADED, () => {
+      const pos = timeToPos(pendingSeekT ?? t);
+      h.startLoad(pos);
+      video.currentTime = pos;
+      playVideo();
+    });
+    h.loadSource(pl.blobUrl);
+  }
+
+  function seekTo(t) {
+    const now = Date.now();
+    if (!canRewind() || t >= now - LIVE_WINDOW_MS) {
+      if (!password && t < now - LIVE_WINDOW_MS && bufferStart !== null) {
+        toast('<a href="index.html">Log in</a> to rewind the stream.', 6000);
+      }
+      return goLive();
+    }
+    goBuffer(Math.max(t, bufferStart));
+  }
+
+  // ±N seconds. While rewinding this steps through footage, so a jump never bounces off a gap.
+  function relSeek(sec) {
+    if (mode !== 'buffer') return seekTo(currentT() + sec * 1000);
+    const frags = rewindFrags(), last = frags[frags.length - 1];
+    const pos = Math.max(0, video.currentTime + sec);
+    if (!last || pos >= last.start + last.dur - 1) return goLive();
+    seekTo(posToTime(pos));
+  }
+
+  // Footage that was damaged on the way in (e.g. the stream glitched) can make the browser's decoder
+  // give up. Skip past the bad ~6s slice instead of freezing.
+  function onMediaError() {
+    const now = Date.now();
+    mediaErrors = mediaErrors.filter(x => now - x < 30000);
+    mediaErrors.push(now);
+    if (mode !== 'buffer') { mode = null; return goLive(); }        // rebuild the live player
+    if (mediaErrors.length > 5) { toast('This part of the recording is damaged — back to live.'); return goLive(); }
+    const frags = rewindFrags(), p = video.currentTime, last = frags[frags.length - 1];
+    const f = frags.find(x => p >= x.start - 0.01 && p < x.start + x.dur);
+    const nextPos = f ? f.start + f.dur + 0.05 : p + 6;
+    if (!last || nextPos >= last.start + last.dur) return goLive('Caught up — back to live');
+    toast('Skipped a few damaged seconds of the recording.', 2500);
+    goBuffer(posToTime(nextPos), true);
+  }
+
+  function currentT() {
+    if (pendingSeekT !== null) return pendingSeekT;   // a seek is still loading: show where we're going
+    if (mode === 'buffer') {
+      return (hls && hls.playingDate && hls.playingDate.getTime()) || posToTime(video.currentTime);
+    }
+    const lat = hls && isFinite(hls.latency) ? hls.latency : 0;
+    return Date.now() - lat * 1000;
+  }
+
+  // At the end of the rewind snapshot: continue with newer footage, or hand off to live.
+  async function onEnded() {
+    if (mode !== 'buffer') return;
+    const t = currentT();
+    try {
+      const pl = await loadRewindPlaylist(true);
+      if (pl.endT - t > CAUGHT_UP_MS) return goBuffer(t + 500);
+    } catch (e) { /* fall through to live */ }
+    goLive('Caught up — back to live');
+  }
+
+  function onHlsError(evt, data) {
+    if (!data.fatal) {
+      if (mode === 'buffer' && data.details === Hls.ErrorDetails.BUFFER_APPEND_ERROR) onMediaError();
+      return;
+    }
+    const code = data.response && data.response.code;
+    if (mode === 'buffer') {
+      if (data.type === Hls.ErrorTypes.MEDIA_ERROR) return onMediaError();
+      if (code === 401) { toast('Your login has expired. <a href="index.html">Log in again</a> to rewind.', 7000); return goLive(); }
+      const t = currentT();
+      if (code === 404 && Date.now() - retriedAt > 15000) {   // footage aged out of the snapshot: refresh once
+        retriedAt = Date.now();
+        rewind = null;
+        return goBuffer(t);
+      }
+      toast("Couldn't load that part of the recording — back to live.");
+      return goLive();
+    }
+    // live
+    if (data.type === Hls.ErrorTypes.MEDIA_ERROR) { hls.recoverMediaError(); return; }
+    spinner.classList.add('show');
+    toast("The live stream isn't responding — retrying…");
+    setTimeout(() => { if (mode === 'live') { mode = null; goLive(); } }, 5000);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Timeline UI
+  // ---------------------------------------------------------------------------
+  const rangeStart = () => canRewind() ? bufferStart : Date.now() - LIVE_WINDOW_MS;
+  function tToFrac(t) {
+    const a = rangeStart(), b = Date.now();
+    return b > a ? Math.min(1, Math.max(0, (t - a) / (b - a))) : 1;
+  }
+  function fracToT(f) { const a = rangeStart(), b = Date.now(); return a + f * (b - a); }
+
+  function renderRanges() {
+    track.querySelectorAll('.avail').forEach(n => n.remove());
+    const ranges = (rewind && rewind.ranges) || (canRewind() ? [[bufferStart, Date.now()]] : []);
+    for (const [a, b] of ranges) {
+      const el = document.createElement('div');
+      el.className = 'avail';
+      const l = tToFrac(a), r = tToFrac(b);
+      el.style.left = (l * 100) + '%';
+      el.style.width = (Math.max(0, r - l) * 100) + '%';
+      track.insertBefore(el, fill);
+    }
+  }
+
+  function updateUI() {
+    const t = dragging ? dragT : currentT();
+    const f = tToFrac(t);
+    fill.style.width = (f * 100) + '%';
+    knob.style.left = (f * 100) + '%';
+    const atLive = mode === 'live' && !dragging;
+    liveBtn.classList.toggle('on', atLive);
+    liveBtn.setAttribute('aria-pressed', atLive ? 'true' : 'false');
+    clock.textContent = t ? fmtTime(t) : '';
+    behind.textContent = atLive ? '' : fmtAgo(Math.max(0, Date.now() - t));
+    scrub.setAttribute('aria-valuetext', clock.textContent);
+    $('play').innerHTML = video.paused ? ICON_PLAY : ICON_PAUSE;
+    $('play').setAttribute('aria-label', video.paused ? 'Play' : 'Pause');
+    $('mute').innerHTML = video.muted ? ICON_MUTED : ICON_SOUND;
+    $('mute').setAttribute('aria-label', video.muted ? 'Unmute' : 'Mute');
+    unmuteBtn.hidden = !video.muted;
+  }
+
+  function pointerFrac(e) {
+    const r = scrub.getBoundingClientRect();
+    return Math.min(1, Math.max(0, (e.clientX - r.left) / r.width));
+  }
+  function showTip(frac, t) {
+    tip.style.left = Math.min(Math.max(frac * 100, 6), 94) + '%';
+    const now = Date.now();
+    tip.textContent = t >= now - LIVE_WINDOW_MS ? 'LIVE' : fmtTime(t);
+  }
+  function warmPlaylist() { if (canRewind()) loadRewindPlaylist(false).catch(() => {}); }
+
+  scrub.addEventListener('pointerenter', e => { if (e.pointerType === 'mouse') { scrub.classList.add('hovering'); warmPlaylist(); } });
+  scrub.addEventListener('pointerleave', () => scrub.classList.remove('hovering'));
+  scrub.addEventListener('pointermove', e => {
+    const fr = pointerFrac(e), t = fracToT(fr);
+    showTip(fr, t);
+    if (dragging) { dragT = t; updateUI(); }
+  });
+  scrub.addEventListener('pointerdown', e => {
+    warmPlaylist();
+    dragging = true;
+    scrub.classList.add('drag');
+    scrub.setPointerCapture(e.pointerId);
+    const fr = pointerFrac(e);
+    dragT = fracToT(fr);
+    showTip(fr, dragT);
+    updateUI();
+  });
+  function endDrag() {
+    if (!dragging) return;
+    dragging = false;
+    scrub.classList.remove('drag');
+    seekTo(dragT);
+  }
+  scrub.addEventListener('pointerup', endDrag);
+  scrub.addEventListener('pointercancel', () => { dragging = false; scrub.classList.remove('drag'); });
+  scrub.addEventListener('keydown', e => {
+    if (e.key === 'ArrowLeft') { relSeek(-10); e.preventDefault(); }
+    if (e.key === 'ArrowRight') { relSeek(10); e.preventDefault(); }
+    if (e.key === 'End') { goLive(); e.preventDefault(); }
+  });
+
+  $('play').onclick = () => {
+    if (!video.paused) { video.pause(); return updateUI(); }
+    const t = currentT();
+    // Paused on live long enough that the live stream no longer has that moment: resume from the buffer.
+    if (mode === 'live' && canRewind() && t < Date.now() - LIVE_WINDOW_MS) return seekTo(t);
+    playVideo();
+    updateUI();
+  };
+  $('back30').onclick = () => relSeek(-30);
+  $('fwd30').onclick = () => relSeek(30);
+  liveBtn.onclick = () => { if (mode !== 'live') goLive(); };
+  $('mute').onclick = () => { video.muted = !video.muted; updateUI(); };
+  unmuteBtn.onclick = () => { video.muted = false; playVideo(); updateUI(); };
+  $('fs').onclick = () => {
+    if (document.fullscreenElement) return document.exitFullscreen();
+    if (stage.requestFullscreen) stage.requestFullscreen().catch(() => {});
+    else if (video.webkitEnterFullscreen) video.webkitEnterFullscreen();
+  };
+  $('jump').addEventListener('submit', e => {
+    e.preventDefault();
+    const v = $('jump-time').value;
+    if (!v) return;
+    const [hh, mm] = v.split(':').map(Number);
+    const d = new Date(); d.setHours(hh, mm, 0, 0);
+    if (d.getTime() > Date.now() + 60000) d.setDate(d.getDate() - 1);   // e.g. 11 PM asked at 1 AM
+    const t = d.getTime();
+    if (!password) return toast('<a href="index.html">Log in</a> to rewind the stream.', 6000);
+    if (bufferStart === null) return toast("Rewind isn't available right now.");
+    if (t < bufferStart) {
+      toast('Only footage since ' + fmtShort(bufferStart) + ' is available — starting there.');
+    }
+    seekTo(t);
+  });
+  document.addEventListener('keydown', e => {
+    if (e.target.tagName === 'INPUT') return;
+    if (e.key === ' ' || e.key === 'k') { $('play').click(); e.preventDefault(); }
+  });
+
+  video.addEventListener('playing', () => { spinner.classList.remove('show'); if (mode === 'buffer') pendingSeekT = null; });
+  video.addEventListener('waiting', () => spinner.classList.add('show'));
+  video.addEventListener('seeked', () => {
+    if (mode === 'buffer' && hls && hls.playingDate) pendingSeekT = null;
+    if (!video.paused) spinner.classList.remove('show');
+  });
+  video.addEventListener('ended', onEnded);
+  video.addEventListener('error', () => { if (video.error && video.error.code === MediaError.MEDIA_ERR_DECODE) onMediaError(); });
+  video.addEventListener('click', () => { if (Date.now() - wokeFromIdleAt > 500) $('play').click(); });
+
+  // Auto-hide controls while playing
+  let idleTimer = null;
+  function wake() {
+    if (stage.classList.contains('idle')) wokeFromIdleAt = Date.now();   // first tap only reveals controls
+    stage.classList.remove('idle');
+    clearTimeout(idleTimer);
+    idleTimer = setTimeout(() => { if (!video.paused && !dragging) stage.classList.add('idle'); }, 3500);
+  }
+  ['pointermove', 'pointerdown', 'keydown', 'touchstart'].forEach(ev => stage.addEventListener(ev, wake, { passive: true }));
+
+  // ---------------------------------------------------------------------------
+  // Start
+  // ---------------------------------------------------------------------------
+  goLive();
+  wake();
+  refreshBufferStatus().then(renderRanges);
+  setInterval(() => refreshBufferStatus().then(renderRanges), 60000);
+  setInterval(renderRanges, 5000);
+  setInterval(updateUI, 250);
+  updateUI();
+})();
+</script>
 </body>
 </html>
