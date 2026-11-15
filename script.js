@@ -93,7 +93,21 @@ function showLockoutScreen(msRemaining) {
 // ==========================================
 // Initialization
 // ==========================================
+function updateRecordingNamePlaceholders() {
+	const sunday = new Date();
+	// Keep today's date on Sundays, including when recovering a past broadcast.
+	sunday.setDate(sunday.getDate() + (7 - sunday.getDay()) % 7);
+	const date = `${sunday.getMonth() + 1}/${sunday.getDate()}/${String(sunday.getFullYear()).slice(-2)}`;
+	for (const id of ['recording-name', 'clip-recording-name']) {
+		const input = document.getElementById(id);
+		if (input) input.placeholder = `e.g. 10AM ${date}`;
+	}
+}
+
 document.addEventListener("DOMContentLoaded", () => {
+	updateRecordingNamePlaceholders();
+	setInterval(updateRecordingNamePlaceholders, 60 * 1000);
+	window.addEventListener('focus', updateRecordingNamePlaceholders);
 
 	// If the URL contains the timeout marker, show a distinct message on the login screen
 	if (window.location.href && window.location.href.includes('something-went-wrong')) {
@@ -994,6 +1008,17 @@ async function cancelRecording() {
 // ==========================================
 // Recordings List
 // ==========================================
+function recordingExpiryText(expiresAt) {
+	if (!expiresAt) return '';
+	const expiryMs = new Date(expiresAt).getTime();
+	if (!Number.isFinite(expiryMs)) return '';
+	const remaining = expiryMs - Date.now();
+	if (remaining <= 0) return 'deletion due';
+	if (remaining >= 24 * 3600 * 1000) return `deletes in ${Math.floor(remaining / (24 * 3600 * 1000))}d`;
+	if (remaining >= 3600 * 1000) return `deletes in ${Math.floor(remaining / (3600 * 1000))}h`;
+	return 'deletes in <1hr';
+}
+
 async function loadRecordings() {
 	try {
 		const res = await apiCall("/recordings");
@@ -1023,56 +1048,31 @@ async function loadRecordings() {
 
 			const status = (rec.status || '').toString().toLowerCase();
 			const isDeleted = ['deleted','removed','canceled','cancelled'].includes(status) || rec.deleted === true || rec.isDeleted === true;
+			const id = rec.id || rec.jobId;
+			const recName = rec.recording_name || rec.recordingName || '';
 
 			let actionButtonsHtml = "";
 			const canDownload = status === 'done' && (rec.download_url || rec.downloadUrl);
 			if (canDownload && !isDeleted) {
-				const id = rec.id || rec.jobId;
-				const recName = rec.recording_name || rec.recordingName || '';
 				actionButtonsHtml = `
-					<a href="#" onclick="watchRecording('${id}'); return false;" class="action-watch inline-flex items-center justify-center px-3 py-1.5 border border-blue-300 text-xs font-medium rounded shadow-sm text-blue-700 bg-white hover:bg-blue-50">Watch</a>
-					<a href="#" onclick="copyShareLink(this, '${encodeURIComponent(recName)}'); return false;" class="action-share inline-flex items-center justify-center px-3 py-1.5 border border-gray-300 text-xs font-medium rounded shadow-sm text-gray-700 bg-white hover:bg-gray-50 focus:outline-none">
+					<a href="#" class="action-watch inline-flex items-center justify-center px-3 py-1.5 border border-blue-300 text-xs font-medium rounded shadow-sm text-blue-700 bg-white hover:bg-blue-50">Watch</a>
+					<a href="#" aria-label="Share recording" class="action-share inline-flex items-center justify-center px-3 py-1.5 border border-gray-300 text-xs font-medium rounded shadow-sm text-gray-700 bg-white hover:bg-gray-50 focus:outline-none">
 						<svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path fill-rule="evenodd" clip-rule="evenodd" d="M1 18.5088C1 13.1679 4.90169 8.77098 9.99995 7.84598V5.51119C9.99995 3.63887 12.1534 2.58563 13.6313 3.73514L21.9742 10.224C23.1323 11.1248 23.1324 12.8752 21.9742 13.7761L13.6314 20.2649C12.1534 21.4144 10 20.3612 10 18.4888V16.5189C7.74106 16.9525 5.9625 18.1157 4.92778 19.6838C4.33222 20.5863 3.30568 20.7735 2.55965 20.5635C1.80473 20.3511 1.00011 19.6306 1 18.5088ZM12.4034 5.31385C12.2392 5.18613 11.9999 5.30315 11.9999 5.51119V9.41672C11.9999 9.55479 11.8873 9.66637 11.7493 9.67008C8.09094 9.76836 4.97774 12.0115 3.66558 15.1656C3.46812 15.6402 3.31145 16.1354 3.19984 16.647C3.07554 17.217 3.00713 17.807 3.00053 18.412C3.00018 18.4442 3 18.4765 3 18.5088C3.00001 18.6437 3.18418 18.6948 3.25846 18.5822C3.27467 18.5577 3.29101 18.5333 3.30747 18.5088C3.63446 18.0244 4.01059 17.5765 4.42994 17.168C7.05882 15.1158 9.28642 14.3823 11.7496 14.3357C11.8877 14.3331 12 14.4453 12 14.5834V18.4888C12 18.6969 12.2393 18.8139 12.4035 18.6862L20.7463 12.1973C20.875 12.0973 20.875 11.9028 20.7463 11.8027L12.4034 5.31385Z" fill="currentColor"/></svg>
 					</a>
-					<a href="#" onclick="downloadRecording('${id}', '${escapeHtml(recName)}'); return false;" class="action-download inline-flex items-center justify-center px-3 py-1.5 border border-transparent text-xs font-medium rounded shadow-sm text-white bg-blue-600 hover:bg-blue-700">Download</a>
+					<a href="#" class="action-download inline-flex items-center justify-center px-3 py-1.5 border border-transparent text-xs font-medium rounded shadow-sm text-white bg-blue-600 hover:bg-blue-700">Download</a>
 				`;
 			}
 			const cloud = cloudBackupInfo(rec);
 			if (cloud.hasSeparateBackup) {
-				const bid = `${rec.id || rec.jobId}_backup`;
 				actionButtonsHtml += `
-					<a href="#" onclick="downloadRecording('${bid}'); return false;" title="The cloud backup copy of this recording" class="action-download inline-flex items-center justify-center px-3 py-1.5 border border-amber-300 text-xs font-medium rounded shadow-sm text-amber-800 bg-white hover:bg-amber-50">Backup</a>
+					<a href="#" title="The cloud backup copy of this recording" class="action-backup action-download inline-flex items-center justify-center px-3 py-1.5 border border-amber-300 text-xs font-medium rounded shadow-sm text-amber-800 bg-white hover:bg-amber-50">Backup</a>
 				`;
 			}
 			const warningHtml = rec.warning ? `<p class="text-xs text-amber-700 mt-1">${escapeHtml(rec.warning)}</p>` : '';
 
 			const createdAt = rec.created_at || rec.startTime || rec.start_time;
-			let autodeleteHtml = '';
-			if (!isDeleted && createdAt) {
-				const createdMs = new Date(createdAt).getTime();
-				const ttl = 30 * 24 * 60 * 60 * 1000;
-				const remaining = (createdMs + ttl) - Date.now();
-				let autodeleteText = '';
-				if (remaining <= 0) {
-					autodeleteText = '0d';
-				} else {
-					const dayMs = 24 * 3600 * 1000;
-					const hourMs = 3600 * 1000;
-					if (remaining >= dayMs) {
-						// Never round up days — use floor
-						const days = Math.floor(remaining / dayMs);
-						autodeleteText = `${days}d`;
-					} else if (remaining >= hourMs) {
-						// Show hours when less than a day
-						const hours = Math.floor(remaining / hourMs);
-						autodeleteText = `${hours}h`;
-					} else {
-						// Less than 1 hour
-						autodeleteText = '<1hr';
-					}
-				}
-				autodeleteHtml = ` <span>&bull;</span> <span class="text-xs text-gray-500">deletes in ${autodeleteText}</span>`;
-			}
+			const expiryText = isDeleted ? '' : recordingExpiryText(rec.expires_at);
+			const autodeleteHtml = expiryText ? ` <span>&bull;</span> <span class="text-xs text-gray-500">${escapeHtml(expiryText)}</span>` : '';
 
 			div.innerHTML = `
 				<div class="recording-info flex-1 min-w-0 pr-0 sm:pr-4">
@@ -1097,6 +1097,16 @@ async function loadRecordings() {
 				</div>
 			`;
 
+			// Keep recording values in the listener closure, never in executable HTML.
+			div.addEventListener('click', event => {
+				const action = event.target.closest('a');
+				if (!action || !div.contains(action)) return;
+				event.preventDefault();
+				if (action.classList.contains('action-watch')) watchRecording(id);
+				else if (action.classList.contains('action-share')) copyShareLink(action, id);
+				else if (action.classList.contains('action-backup')) downloadRecording(`${id}_backup`);
+				else if (action.classList.contains('action-download')) downloadRecording(id, recName);
+			});
 			listEl.appendChild(div);
 		});
 
@@ -1281,9 +1291,9 @@ async function loadAdminRecordings() {
 
 			const div = document.createElement('div');
 			div.className = 'admin-recording-row py-3 flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-center';
-			const watchBtnHtml = canWatch ? `<a href="#" onclick="watchRecording('${rec.id || rec.jobId}'); return false;" class="action-watch admin-action-btn inline-flex items-center justify-center px-2.5 py-1.5 border border-blue-300 shadow-sm text-xs font-medium rounded text-blue-700 bg-white hover:bg-blue-50">Watch</a>` : '';
-			const deleteBtnHtml = hideDeleteBtn ? '' : `<button class="action-delete admin-action-btn inline-flex items-center justify-center px-2.5 py-1.5 border border-red-300 shadow-sm text-xs font-medium rounded text-red-700 bg-white hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500" onclick="window.deleteRecording('${rec.id || rec.jobId}')">Delete</button>`;
-			const eraseBtnHtml = canErase ? `<button class="action-erase admin-action-btn inline-flex items-center justify-center px-2.5 py-1.5 border border-gray-300 shadow-sm text-xs font-medium rounded text-gray-500 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-400" onclick="window.eraseRecord('${rec.id || rec.jobId}')">Erase</button>` : '';
+			const watchBtnHtml = canWatch ? `<a href="#" class="action-watch admin-action-btn inline-flex items-center justify-center px-2.5 py-1.5 border border-blue-300 shadow-sm text-xs font-medium rounded text-blue-700 bg-white hover:bg-blue-50">Watch</a>` : '';
+			const deleteBtnHtml = hideDeleteBtn ? '' : `<button class="action-delete admin-action-btn inline-flex items-center justify-center px-2.5 py-1.5 border border-red-300 shadow-sm text-xs font-medium rounded text-red-700 bg-white hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500">Delete</button>`;
+			const eraseBtnHtml = canErase ? `<button class="action-erase admin-action-btn inline-flex items-center justify-center px-2.5 py-1.5 border border-gray-300 shadow-sm text-xs font-medium rounded text-gray-500 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-400">Erase</button>` : '';
 			const recordingName = rec.recordingName || rec.recording_name || '';
 			const displayName = fileSize > 0 ? `${recordingName} · ${formatStorageSize(fileSize)}` : recordingName;
 			div.innerHTML = `
@@ -1293,7 +1303,7 @@ async function loadAdminRecordings() {
 						${rec.job_type === 'clip' ? '<span class="ml-1.5 badge badge-clip">Buffer Clip</span>' : ''}
 						${priorityBadgeHtml(rec)}
 					</p>
-					<p class="text-xs text-gray-500 mt-1">ID: ${rec.id || rec.jobId} &bull; ${escapeHtml(rec.status || '')}</p>
+					<p class="text-xs text-gray-500 mt-1">ID: ${escapeHtml(recordId)} &bull; ${escapeHtml(rec.status || '')}</p>
 					<p class="text-xs text-gray-500 mt-1">Views: ${escapeHtml(String(Number(rec.download_count || rec.downloadCount || 0) + Number(rec.watch_count || rec.watchCount || 0)))}</p>
 					${cloudBackupInfo(rec).html}
 				</div>
@@ -1302,6 +1312,14 @@ async function loadAdminRecordings() {
 				</div>
 			`;
 
+			div.addEventListener('click', event => {
+				const action = event.target.closest('a, button');
+				if (!action || !div.contains(action)) return;
+				event.preventDefault();
+				if (action.classList.contains('action-watch')) watchRecording(recordId);
+				else if (action.classList.contains('action-delete')) window.deleteRecording(recordId);
+				else if (action.classList.contains('action-erase')) window.eraseRecord(recordId);
+			});
 			listEl.appendChild(div);
 		});
 
@@ -1407,7 +1425,7 @@ window.downloadRecording = async function(id, suggestedName) {
     }
 };
 
-window.copyShareLink = function(el, name) {
+window.copyShareLink = function(el, id) {
     const password = decodePassword(localStorage.getItem('recordsb_password'));
     if (!password) {
         showTooltip(el, 'Please log in before sharing.');
@@ -1415,7 +1433,8 @@ window.copyShareLink = function(el, name) {
     }
     // User passwords are four characters; admin passwords end with -<user password>.
     const encodedPassword = encodePassword(password.slice(-4));
-    const url = `https://recordsb.github.io/cc/clip.html#${name}?pw=${encodeURIComponent(encodedPassword)}`;
+    if (!id) return showTooltip(el, 'Missing recording id');
+    const url = `https://recordsb.github.io/cc/clip.html#id:${encodeURIComponent(id)}?pw=${encodeURIComponent(encodedPassword)}`;
     navigator.clipboard.writeText(url).then(() => {
         showTooltip(el, 'Share Link Copied!');
     }).catch(err => {
