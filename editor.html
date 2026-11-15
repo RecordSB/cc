@@ -43,7 +43,7 @@
             <div id="render-modal-choose" class="p-6">
                 <h3 class="text-lg font-semibold text-gray-900 mb-1">Export Clip</h3>
                 <p class="text-sm text-gray-500 mb-4">
-                    The exported file will be deleted from storage after you download it.
+                    The exported file is kept for 24 hours so you can retry your download.
                 </p>
                 <div class="space-y-2">
                     <button onclick="startRender('both')"
@@ -89,10 +89,13 @@
 
             <!-- State: done -->
             <div id="render-modal-done" class="hidden p-6 text-center">
-                <h3 class="text-lg font-semibold text-gray-900 mb-2">Download started!</h3>
-                <p class="text-sm text-gray-500 mb-5">
-                    The render output has been deleted from storage.
-                </p>
+                <h3 class="text-lg font-semibold text-gray-900 mb-2">Export ready</h3>
+                <p id="render-modal-download-status" class="text-sm text-gray-500 mb-3"></p>
+                <p id="render-modal-expiry" class="text-xs text-gray-500 mb-5"></p>
+                <button id="render-download-retry" type="button"
+                    class="w-full px-4 py-2 mb-2 bg-blue-600 text-white rounded-md text-sm font-medium hover:bg-blue-700 disabled:opacity-40 transition-colors">
+                    Download again
+                </button>
                 <button onclick="closeRenderModal()"
                     class="w-full px-4 py-2 bg-gray-100 text-gray-700 rounded-md text-sm font-medium hover:bg-gray-200 transition-colors">
                     Close
@@ -101,8 +104,12 @@
 
             <!-- State: error -->
             <div id="render-modal-error" class="hidden p-6 text-center">
-                <h3 class="text-lg font-semibold text-gray-900 mb-2">Render failed</h3>
+                <h3 class="text-lg font-semibold text-gray-900 mb-2">Export failed</h3>
                 <p id="render-modal-error-text" class="text-sm text-red-600 mb-5">An error occurred.</p>
+                <button id="render-upload-retry" type="button"
+                    class="hidden w-full px-4 py-2 mb-2 bg-blue-600 text-white rounded-md text-sm font-medium hover:bg-blue-700 disabled:opacity-40 transition-colors">
+                    Retry upload
+                </button>
                 <button onclick="closeRenderModal()"
                     class="w-full px-4 py-2 bg-gray-100 text-gray-700 rounded-md text-sm font-medium hover:bg-gray-200 transition-colors">
                     Close
