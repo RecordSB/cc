@@ -175,8 +175,6 @@ async function loadClipByHash() {
         const parts = rawHash.split('?');
         rawHash = parts[0];
     }
-    const decodedHash = decodeURIComponent(rawHash).trim();
-
     const loadingEl = document.getElementById('clip-loading');
     const errorCard = document.getElementById('clip-error-card');
     const contentEl = document.getElementById('clip-content');
@@ -187,15 +185,18 @@ async function loadClipByHash() {
     if (errorCard) errorCard.classList.add('hidden');
     if (contentEl) contentEl.classList.add('hidden');
 
-    if (!decodedHash) {
+    if (!rawHash) {
         if (loadingEl) loadingEl.classList.add('hidden');
         if (errorCard) errorCard.classList.remove('hidden');
         if (errorTitle) errorTitle.textContent = "No Recording Specified";
-        if (errorDesc) errorDesc.textContent = "Please provide a recording name in the URL hash (e.g. clip.html/#10AM_9%2F13).";
+        if (errorDesc) errorDesc.textContent = "Open a recording's Share link, or choose a recording from the home page.";
         return;
     }
 
     try {
+        const decodedHash = decodeURIComponent(rawHash).trim();
+        const byId = decodedHash.startsWith('id:');
+        const recordingId = byId ? decodedHash.slice(3) : '';
         const res = await apiCall("/recordings");
         if (res.status === 401) {
             currentPassword = null;
@@ -208,17 +209,26 @@ async function loadClipByHash() {
         if (!res.ok) throw new Error("Failed to fetch recordings");
         const recordings = await res.json();
 
-        const matched = recordings.find(r => {
+        const matches = recordings.filter(r => {
+            if (byId) return String(r.id || r.jobId || '') === recordingId;
             const name = (r.recording_name || r.recordingName || '').trim();
             return name.toLowerCase() === decodedHash.toLowerCase();
         });
 
         if (loadingEl) loadingEl.classList.add('hidden');
 
+        if (!byId && matches.length > 1) {
+            if (errorCard) errorCard.classList.remove('hidden');
+            if (errorTitle) errorTitle.textContent = "Multiple Recordings Have This Name";
+            if (errorDesc) errorDesc.textContent = `More than one recording is named "${decodedHash}". Open Recordings on the home page, choose the recording by its date, and use its Share button for a unique link.`;
+            return;
+        }
+
+        const matched = matches[0];
         if (!matched) {
             if (errorCard) errorCard.classList.remove('hidden');
             if (errorTitle) errorTitle.textContent = "Clip Does Not Exist";
-            if (errorDesc) errorDesc.textContent = `No recording named "${decodedHash}" was found in the system.`;
+            if (errorDesc) errorDesc.textContent = byId ? 'The recording in this link was not found in the system.' : `No recording named "${decodedHash}" was found in the system.`;
             return;
         }
 
@@ -228,7 +238,7 @@ async function loadClipByHash() {
         if (isDeleted) {
             if (errorCard) errorCard.classList.remove('hidden');
             if (errorTitle) errorTitle.textContent = "Recording Was Deleted";
-            if (errorDesc) errorDesc.textContent = `The recording "${decodedHash}" existed previously but has been deleted from storage.`;
+            if (errorDesc) errorDesc.textContent = `The recording "${matched.recording_name || matched.recordingName || 'Untitled Recording'}" existed previously but has been deleted from storage.`;
             return;
         }
 
@@ -241,6 +251,17 @@ async function loadClipByHash() {
         if (errorTitle) errorTitle.textContent = "Error Loading Clip";
         if (errorDesc) errorDesc.textContent = e.message || "An unexpected error occurred while loading clip details.";
     }
+}
+
+function recordingExpiryText(expiresAt) {
+    if (!expiresAt) return '';
+    const expiryMs = new Date(expiresAt).getTime();
+    if (!Number.isFinite(expiryMs)) return '';
+    const remaining = expiryMs - Date.now();
+    if (remaining <= 0) return 'deletion due';
+    if (remaining >= 24 * 3600 * 1000) return `deletes in ${Math.floor(remaining / (24 * 3600 * 1000))}d`;
+    if (remaining >= 3600 * 1000) return `deletes in ${Math.floor(remaining / (3600 * 1000))}h`;
+    return 'deletes in <1hr';
 }
 
 function renderClipDetails(rec) {
@@ -280,28 +301,10 @@ function renderClipDetails(rec) {
     }
 
     const autodeleteEl = document.getElementById('clip-autodelete');
-    if (createdAt && autodeleteEl) {
-        const createdMs = new Date(createdAt).getTime();
-        const ttl = 30 * 24 * 60 * 60 * 1000;
-        const remaining = (createdMs + ttl) - Date.now();
-        let autodeleteText = '';
-        if (remaining <= 0) {
-            autodeleteText = '0d';
-        } else {
-            const dayMs = 24 * 3600 * 1000;
-            const hourMs = 3600 * 1000;
-            if (remaining >= dayMs) {
-                const days = Math.floor(remaining / dayMs);
-                autodeleteText = `${days}d`;
-            } else if (remaining >= hourMs) {
-                const hours = Math.floor(remaining / hourMs);
-                autodeleteText = `${hours}h`;
-            } else {
-                autodeleteText = '<1hr';
-            }
-        }
-        autodeleteEl.innerHTML = `<span>&bull;</span> <span class="text-xs text-gray-500">deletes in ${autodeleteText}</span>`;
-        autodeleteEl.classList.remove('hidden');
+    if (autodeleteEl) {
+        const expiryText = recordingExpiryText(rec.expires_at);
+        autodeleteEl.textContent = expiryText ? `• ${expiryText}` : '';
+        autodeleteEl.classList.toggle('hidden', !expiryText);
     }
 
     const viewsEl = document.getElementById('clip-views');
@@ -320,17 +323,23 @@ function renderClipDetails(rec) {
     const headerActionsContainer = document.getElementById('header-actions');
 
     const buttonsHtml = `
-        <button onclick="copyShareLink(this, '${encodeURIComponent(recName)}')" class="inline-flex items-center px-3 py-2 border border-gray-300 text-xs font-medium rounded-md shadow-sm text-gray-700 bg-white hover:bg-gray-50 focus:outline-none">
+        <button class="action-share inline-flex items-center px-3 py-2 border border-gray-300 text-xs font-medium rounded-md shadow-sm text-gray-700 bg-white hover:bg-gray-50 focus:outline-none">
             <svg class="w-4 h-4 mr-1.5" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path fill-rule="evenodd" clip-rule="evenodd" d="M1 18.5088C1 13.1679 4.90169 8.77098 9.99995 7.84598V5.51119C9.99995 3.63887 12.1534 2.58563 13.6313 3.73514L21.9742 10.224C23.1323 11.1248 23.1324 12.8752 21.9742 13.7761L13.6314 20.2649C12.1534 21.4144 10 20.3612 10 18.4888V16.5189C7.74106 16.9525 5.9625 18.1157 4.92778 19.6838C4.33222 20.5863 3.30568 20.7735 2.55965 20.5635C1.80473 20.3511 1.00011 19.6306 1 18.5088ZM12.4034 5.31385C12.2392 5.18613 11.9999 5.30315 11.9999 5.51119V9.41672C11.9999 9.55479 11.8873 9.66637 11.7493 9.67008C8.09094 9.76836 4.97774 12.0115 3.66558 15.1656C3.46812 15.6402 3.31145 16.1354 3.19984 16.6471C3.07554 17.217 3.00713 17.8072 3.00053 18.412C3.00018 18.4442 3 18.4765 3 18.5088C3.00001 18.6437 3.18418 18.6948 3.25846 18.5822C3.27467 18.5577 3.29101 18.5332 3.30747 18.5088C3.30748 18.5088 3.30746 18.5088 3.30747 18.5088C3.63446 18.0244 4.01059 17.5765 4.42994 17.168C4.71487 16.8905 5.01975 16.6313 5.34276 16.3912C7.05882 15.1158 9.28642 14.3823 11.7496 14.3357C11.8877 14.3331 12 14.4453 12 14.5834V18.4888C12 18.6969 12.2393 18.8139 12.4035 18.6862L20.7463 12.1973C20.875 12.0973 20.875 11.9028 20.7463 11.8027L12.4034 5.31385Z" fill="currentColor"/></svg>
             Share
         </button>
-        <button onclick="downloadRecording(this, '${id}', '${escapeHtml(recName)}')" class="inline-flex items-center px-4 py-2 border border-transparent text-xs font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
+        <button class="action-download inline-flex items-center px-4 py-2 border border-transparent text-xs font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
             Download
         </button>
     `;
 
-    if (actionButtonsContainer) actionButtonsContainer.innerHTML = buttonsHtml;
-    if (headerActionsContainer) headerActionsContainer.innerHTML = buttonsHtml;
+    for (const container of [actionButtonsContainer, headerActionsContainer]) {
+        if (!container) continue;
+        container.innerHTML = buttonsHtml;
+        const shareButton = container.querySelector('.action-share');
+        const downloadButton = container.querySelector('.action-download');
+        shareButton.addEventListener('click', () => copyShareLink(shareButton, id));
+        downloadButton.addEventListener('click', () => downloadRecording(downloadButton, id, recName));
+    }
 
     loadVideoPreview(id);
 }
@@ -388,7 +397,7 @@ window.downloadRecording = async function(btnEl, id, suggestedName) {
     }
 };
 
-window.copyShareLink = function(el, name) {
+window.copyShareLink = function(el, id) {
     const password = getStoredPassword();
     if (!password) {
         showTooltip(el, 'Please log in before sharing.');
@@ -396,7 +405,8 @@ window.copyShareLink = function(el, name) {
     }
     // User passwords are four characters; admin passwords end with -<user password>.
     const encodedPassword = encodePassword(password.slice(-4));
-    const url = `https://recordsb.github.io/cc/clip.html#${name}?pw=${encodeURIComponent(encodedPassword)}`;
+    if (!id) return showTooltip(el, 'Missing recording id');
+    const url = `https://recordsb.github.io/cc/clip.html#id:${encodeURIComponent(id)}?pw=${encodeURIComponent(encodedPassword)}`;
     navigator.clipboard.writeText(url).then(() => {
         showTooltip(el, 'Share Link Copied!');
     }).catch(err => {
