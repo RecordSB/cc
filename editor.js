@@ -11,6 +11,8 @@ let outPoint = 0;
 let isDragging = null; // 'in' | 'out' | 'seek' | null
 let renderJobId = null;
 let renderPollInterval = null;
+let renderExpiresAt = null;
+let renderUploadRetryAvailable = false;
 
 // Helper functions for base64 encoding/decoding of stored password
 function encodePassword(pw) {
@@ -136,11 +138,12 @@ async function loadRecordingsList() {
                         ${escapeHtml(dateStr)} · ${escapeHtml(durStr)}
                     </p>
                 </div>
-                <button onclick="openInEditor('${rec.id}')"
-                    class="flex-shrink-0 inline-flex items-center px-3 py-1.5 border border-blue-300 text-blue-700 text-xs font-medium rounded-md hover:bg-blue-50 transition-colors">
+                <button class="action-open-editor flex-shrink-0 inline-flex items-center px-3 py-1.5 border border-blue-300 text-blue-700 text-xs font-medium rounded-md hover:bg-blue-50 transition-colors"
+                    type="button">
                     Open in Editor
                 </button>
             `;
+            div.querySelector('.action-open-editor').addEventListener('click', () => openInEditor(rec.id || rec.jobId));
             listEl.appendChild(div);
         });
 
@@ -459,6 +462,9 @@ function closeRenderModal() {
 }
 
 async function startRender(exportType) {
+    renderJobId = null;
+    renderExpiresAt = null;
+    renderUploadRetryAvailable = false;
     showModalState('loading');
     document.getElementById('render-modal-status').textContent = 'Submitting to server...';
 
@@ -506,11 +512,12 @@ function pollRenderJob() {
             if (status === 'done') {
                 clearInterval(renderPollInterval);
                 renderPollInterval = null;
-                await triggerDownloadAndCleanup(renderJobId);
+                renderExpiresAt = data.expires_at || null;
+                await triggerRenderDownload(renderJobId);
             } else if (status === 'error') {
                 clearInterval(renderPollInterval);
                 renderPollInterval = null;
-                showRenderError(data.error_message || 'Render failed on server');
+                showRenderError(data.error_message || 'Render failed on server', data.retry_available === true);
             }
         } catch (e) {
             console.error('Render poll error:', e);
@@ -518,32 +525,69 @@ function pollRenderJob() {
     }, 3000);
 }
 
-async function triggerDownloadAndCleanup(jobId) {
+async function triggerRenderDownload(jobId) {
+    showModalState('done');
+    const retryButton = document.getElementById('render-download-retry');
+    const statusEl = document.getElementById('render-modal-download-status');
+    const expiryEl = document.getElementById('render-modal-expiry');
+    const expiryDate = renderExpiresAt ? new Date(renderExpiresAt) : null;
+    expiryEl.textContent = expiryDate && Number.isFinite(expiryDate.getTime())
+        ? `Available until ${expiryDate.toLocaleString()}. You can download it again until then.`
+        : 'Exports are kept for 24 hours. You can download it again during that time.';
+    retryButton.disabled = true;
+    statusEl.textContent = 'Getting download link...';
     try {
         const res = await apiCall(`/download/${jobId}`);
-        if (!res.ok) throw new Error('Failed to get download URL');
         const data = await res.json();
-
-        showModalState('done');
+        if (!res.ok) throw new Error(data.error || 'Failed to get download URL');
+        if (!data.url) throw new Error('No download URL returned');
 
         // Trigger browser download via presigned R2 URL
         window.location.href = data.url;
-
-        // Clean up render job from R2 after a delay so download can begin first
-        setTimeout(async () => {
-            try { await apiCall(`/render/cleanup/${jobId}`, 'POST'); }
-            catch (e) { console.error('Render cleanup failed:', e); }
-        }, 4000);
-
+        statusEl.textContent = 'Download requested. If it does not start or is interrupted, use Download again.';
     } catch (e) {
-        showRenderError(e.message || 'Download failed');
+        statusEl.textContent = `Download failed: ${e.message || 'Please try again'}. Use Download again to retry.`;
+    } finally {
+        retryButton.disabled = false;
     }
 }
 
-function showRenderError(msg) {
+async function retryRenderUpload() {
+    if (!renderJobId || !renderUploadRetryAvailable) return;
+    const jobId = renderJobId;
+    const retryButton = document.getElementById('render-upload-retry');
+    renderUploadRetryAvailable = false;
+    retryButton.disabled = true;
+    showModalState('loading');
+    document.getElementById('render-modal-status').textContent = 'Retrying upload of your existing export...';
+    try {
+        const res = await apiCall(`/retry/${encodeURIComponent(jobId)}`, 'POST');
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'The server could not retry the upload');
+        document.getElementById('render-modal-status').textContent = 'Uploading your existing export...';
+        pollRenderJob();
+    } catch (error) {
+        // A rejected request can leave the retained file available, or report that
+        // it expired. Ask the server before offering another upload retry.
+        let retryAvailable = false;
+        try {
+            const statusRes = await apiCall(`/status/${encodeURIComponent(jobId)}`);
+            if (statusRes.ok) retryAvailable = (await statusRes.json()).retry_available === true;
+        } catch (statusError) {
+            console.error('Failed to refresh upload retry availability:', statusError);
+        }
+        showRenderError(`Upload retry failed: ${error.message || 'Network error'}`, retryAvailable);
+    } finally {
+        retryButton.disabled = false;
+    }
+}
+
+function showRenderError(msg, retryAvailable = false) {
     showModalState('error');
     const el = document.getElementById('render-modal-error-text');
     if (el) el.textContent = msg;
+    renderUploadRetryAvailable = !!renderJobId && retryAvailable === true;
+    document.getElementById('render-upload-retry').classList.toggle('hidden', !renderUploadRetryAvailable);
 }
 
 // ==========================================
@@ -580,5 +624,9 @@ document.addEventListener('DOMContentLoaded', () => {
     initTimeline();
     initTimeInputs();
     initKeyboardShortcuts();
+    document.getElementById('render-download-retry').addEventListener('click', () => {
+        if (renderJobId) triggerRenderDownload(renderJobId);
+    });
+    document.getElementById('render-upload-retry').addEventListener('click', retryRenderUpload);
     loadRecordingsList();
 });
